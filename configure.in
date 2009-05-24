@@ -100,6 +100,7 @@ AM_GNU_GETTEXT([external])
 #
 AMANDA_S3_DEVICE
 AMANDA_TAPE_DEVICE
+AMANDA_DVDRW_DEVICE
 
 #
 # Security (authentication) mechansims
@@ -144,6 +145,9 @@ AMANDA_PROG_PCAT
 AMANDA_PROG_PERL
 AMANDA_PROG_SWIG
 AMANDA_PS_ARGUMENT
+AMANDA_PROG_GENISOIMAGE
+AMANDA_PROG_WODIM
+AMANDA_PROG_DVDRW_MEDIAINFO
 
 dnl -------------------------------------------------------------------------
 

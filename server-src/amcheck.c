@@ -764,6 +764,11 @@ start_server_check(
     }
     errf = outf;
 
+/*
+    g_printf("PID: %d\n", getpid());
+    sleep(10);
+ */
+
     g_fprintf(outf, _("Amanda Tape Server Host Check\n"));
     g_fprintf(outf, "-----------------------------\n");
 

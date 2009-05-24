@@ -55,6 +55,10 @@ if WANT_S3_DEVICE
 libamdevice_la_SOURCES += s3-device.c s3.c s3-util.c
 endif
 
+if WANT_DVDRW_DEVICE
+libamdevice_la_SOURCES += dvdrw-device.c
+endif
+
 ## automake-style tests
 
 TESTS = vfs-test
@@ -82,6 +86,7 @@ noinst_HEADERS = \
 	s3-util.h \
 	tape-device.h \
 	tape-ops.h \
-	xfer-device.h
-	
+	xfer-device.h \
+	vfs-device.h
+
 aminclude_HEADERS = 

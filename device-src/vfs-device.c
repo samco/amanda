@@ -22,44 +22,9 @@
 #include <string.h> /* memset() */
 #include "fsusage.h"
 #include "util.h"
-#include "device.h"
 #include <regex.h>
 
-/*
- * Type checking and casting macros
- */
-#define TYPE_VFS_DEVICE	(vfs_device_get_type())
-#define VFS_DEVICE(obj)	G_TYPE_CHECK_INSTANCE_CAST((obj), vfs_device_get_type(), VfsDevice)
-#define VFS_DEVICE_CONST(obj)	G_TYPE_CHECK_INSTANCE_CAST((obj), vfs_device_get_type(), VfsDevice const)
-#define VFS_DEVICE_CLASS(klass)	G_TYPE_CHECK_CLASS_CAST((klass), vfs_device_get_type(), VfsDeviceClass)
-#define IS_VFS_DEVICE(obj)	G_TYPE_CHECK_INSTANCE_TYPE((obj), vfs_device_get_type ())
-
-#define VFS_DEVICE_GET_CLASS(obj)	G_TYPE_INSTANCE_GET_CLASS((obj), vfs_device_get_type(), VfsDeviceClass)
-static GType	vfs_device_get_type	(void);
-
-/*
- * Main object structure
- */
-typedef struct {
-    Device __parent__;
-
-    /*< private >*/
-    char * dir_name;
-    char * file_name;
-    int open_file_fd;
-
-    /* Properties */
-    guint64 volume_bytes;
-    guint64 volume_limit;
-} VfsDevice;
-
-/*
- * Class definition
- */
-typedef struct {
-    DeviceClass __parent__;
-} VfsDeviceClass;
-
+#include "vfs-device.h"
 
 /* This regex will match all VfsDevice files in a directory. We use it
    for cleanup and verification. Note that this regex does NOT match
@@ -77,17 +42,6 @@ typedef struct {
 
 /* This looks dangerous, but is actually modified by the umask. */
 #define VFS_DEVICE_CREAT_MODE 0666
-
-/* Possible (abstracted) results from a system I/O operation. */
-typedef enum {
-    RESULT_SUCCESS,
-    RESULT_ERROR,        /* Undefined error. */
-    RESULT_NO_DATA,      /* End of File, while reading */
-    RESULT_NO_SPACE,     /* Out of space. Sometimes we don't know if
-                            it was this or I/O error, but this is the
-                            preferred explanation. */
-    RESULT_MAX
-} IoResult;
 
 void vfs_device_register(void);
 
@@ -156,7 +110,7 @@ void vfs_device_register(void) {
     register_device(vfs_device_factory, device_prefix_list);
 }
 
-static GType
+GType
 vfs_device_get_type (void)
 {
     static GType type = 0;
