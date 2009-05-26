@@ -8,8 +8,7 @@
 #   WANT_DVDRW_DEVICE is DEFINEd and set up as an AM_CONDITIONAL.
 #
 AC_DEFUN([AMANDA_DVDRW_DEVICE], [
-    AC_REQUIRE([AMANDA_PROG_GENISOIMAGE])
-    AC_REQUIRE([AMANDA_PROG_WODIM])
+    AC_REQUIRE([AMANDA_PROG_GROWISOFS])
     AC_REQUIRE([AMANDA_PROG_DVDRW_MEDIAINFO])
 
     AC_ARG_ENABLE([dvdrw-device],
@@ -20,13 +19,13 @@ AC_DEFUN([AMANDA_DVDRW_DEVICE], [
     AC_MSG_CHECKING([whether to include the DVD-RW device])
     # if the user didn't specify 'no', then check for support
     if test x"$WANT_DVDRW_DEVICE" != x"no"; then
-	if test -n "$GENISOIMAGE" -a -n "$WODIM" -a -n "$DVDRW_MEDIAINFO"; then
+	if test -n "$GROWISOFS" -a -n "$DVDRW_MEDIAINFO"; then
 	    WANT_DVDRW_DEVICE=yes
 	else
 	    # no support -- if the user explicitly enabled the device,
 	    # warn them that they need to install stuff
 	    if test x"$WANT_DVDRW_DEVICE" = x"yes"; then
-		AC_MSG_WARN([DVD-RW device requires genisoimage, wodim and dvd+rw-mediainfo.])
+		AC_MSG_WARN([DVD-RW device requires growisofs and dvd+rw-mediainfo.])
 	    else
 		WANT_DVDRW_DEVICE=no
 	    fi

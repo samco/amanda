@@ -68,3 +68,4 @@ typedef enum {
     RESULT_MAX
 } IoResult;
 
+void vfs_release_file(VfsDevice * self);
