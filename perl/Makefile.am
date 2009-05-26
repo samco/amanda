@@ -7,8 +7,8 @@ include $(top_srcdir)/config/automake/scripts.am
 
 # add the SWIG symbol to avoid conflicts with perl definitions.
 # $AMANDA_WARNING_CFLAGS is omitted because SWIG-generated files tend
-# to trigger warnings
-AM_CFLAGS = -DSWIG
+# to trigger warnings.
+AM_CFLAGS = -DSWIG $(AMANDA_SWIG_PERL_CFLAGS)
 
 # Appropriate INCLUDES depends on which components (server or client) are 
 # being built
@@ -336,6 +336,12 @@ Amanda_DATA += Amanda/MainLoop.pm
 EXTRA_DIST += Amanda/MainLoop.swg Amanda/MainLoop.pm
 MAINTAINERCLEANFILES += Amanda/MainLoop.c Amanda/MainLoop.pm
 
+# PACKAGE: Amanda::IPC::*
+AmandaIPCdir = $(amperldir)/Amanda/IPC
+AmandaIPC_DATA = Amanda/IPC/LineProtocol.pm
+HTML_SOURCE_FILES += $(AmandaIPC_DATA)
+EXTRA_DIST += $(AmandaIPC_DATA)
+
 # PACKAGE: Amanda::Paths
 Amanda_DATA += Amanda/Paths.pm
 EXTRA_DIST += Amanda/Paths.pm.in
@@ -349,6 +355,7 @@ DISTCLEANFILES += Amanda/Constants.pm
 # PACKAGE: Amanda::Script_App
 Amanda_DATA += Amanda/Script_App.pm
 EXTRA_DIST += Amanda/Script_App.pm
+
 
 if WANT_SERVER
 # PACKAGE: Amanda::Holding

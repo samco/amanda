@@ -63,15 +63,15 @@ sub new {
 
     # default properties
     $self->{'props'} = {
-        'PG-DB' => 'template1',
+        'pg-db' => 'template1',
         'PG-CLEANUPWAL' => 'yes',
     };
 
-    my @PROP_NAMES = qw(PG-HOST PG-PORT PG-DB PG-USER PG-PASSWORD PG-PASSFILE PSQL-PATH PG-DATADIR PG-ARCHIVEDIR PG-CLEANUPWAL);
+    my @PROP_NAMES = qw(pg-host pg-port pg-db pg-user pg-password pg-passfile psql-path pg-datadir pg-archivedir pg-cleanupwal);
 
     # config is loaded by Amanda::Application (and Amanda::Script_App)
     my $conf_props = getconf($CNF_PROPERTY);
-    # check for properties like 'PG-HOST'
+    # check for properties like 'pg-host'
     foreach my $pname (@PROP_NAMES) {
         if ($conf_props->{$pname}) {
             debug("More than one value for $pname. Using the first.")
@@ -79,7 +79,7 @@ sub new {
             $self->{'props'}->{$pname} = $conf_props->{$pname}->{'values'}->[0];
         }
     }
-    # check for properties like 'foo-PG-HOST' where the device is 'foo'
+    # check for properties like 'foo-pg-host' where the device is 'foo'
     if ($self->{'args'}->{'device'}) {
         foreach my $pname (@PROP_NAMES) {
             my $tmp = "$self->{'args'}->{'device'}-$pname";
@@ -91,29 +91,29 @@ sub new {
         }
     }
 
-    unless ($self->{'props'}->{'PSQL-PATH'}) {
+    unless ($self->{'props'}->{'psql-path'}) {
         foreach my $pre (split(/:/, $ENV{PATH})) {
             my $psql = "$pre/psql";
             if (-x $psql) {
-                $self->{'props'}{'PSQL-PATH'} = $psql;
+                $self->{'props'}{'psql-path'} = $psql;
                 last;
             }
         }
     }
 
     foreach my $aname (keys %{$self->{'args'}}) {
-        if (defined($self->{'props'}->{$aname})) {
-            debug("property: $aname (undef)");
+        if (defined($self->{'args'}->{$aname})) {
+            debug("app property: $aname $self->{'args'}->{$aname}");
         } else {
-            debug("property: $aname $self->{'args'}->{$aname}");
+            debug("app property: $aname (undef)");
         }
     }
 
     foreach my $pname (keys %{$self->{'props'}}) {
         if (defined($self->{'props'}->{$pname})) {
-            debug("property: $pname (undef)");
+            debug("client property: $pname $self->{'props'}->{$pname}");
         } else {
-            debug("property: $pname $self->{'props'}->{$pname}");
+            debug("client property: $pname (undef)");
         }
     }
 
@@ -141,14 +141,30 @@ EOF
 }
 
 sub _check {
-    my ($desc, $err_suf, $check, @check_args) = @_;
+    my ($desc, $succ_suf, $err_suf, $check, @check_args) = @_;
     my $ret = $check->(@check_args);
-    if ($ret) {
-        print "OK $desc\n";
-    } else {
-        print "ERROR $desc $err_suf\n";
-    }
+    my $msg = $ret? "OK $desc $succ_suf" :  "ERROR $desc $err_suf";
+    debug($msg);
+    print "$msg\n";
     $ret;
+}
+
+sub _check_parent_dirs {
+    my ($dir) = @_;
+    my $is_abs = substr($dir, 0, 1) eq "/";
+    _check("$dir is an absolute path?", "Yes", "No. It should start with '/'",
+       sub {$is_abs});
+
+    my @parts = split('/', $dir);
+    pop @parts; # don't test the last part
+    my $partial_path = '';
+    for my $path_part (@parts) {
+        $partial_path .= $path_part . (($partial_path || $is_abs)? '/' : '');
+        _check("$partial_path is executable?", "Yes", "No",
+               sub {-x $_[0]}, $partial_path);
+        _check("$partial_path is a directory?", "Yes", "No",
+               sub {-d $_[0]}, $partial_path);
+    }
 }
 
 sub _ok_passfile_perms {
@@ -165,17 +181,17 @@ sub _run_psql_command {
 
     # n.b. deprecated, passfile recommended for better security
     my $orig_pgpassword = $ENV{'PGPASSWORD'};
-   $ENV{'PGPASSWORD'} = $self->{'props'}->{'PG-PASSWORD'} if $self->{'props'}->{'PG-PASSWORD'};
+   $ENV{'PGPASSWORD'} = $self->{'props'}->{'pg-password'} if $self->{'props'}->{'pg-password'};
     # n.b. supported in 8.1+
     my $orig_pgpassfile = $ENV{'PGPASSFILE'};
-    $ENV{'PGPASSFILE'} = $self->{'props'}->{'PG-PASSFILE'} if $self->{'props'}->{'PG-PASSFILE'};
+    $ENV{'PGPASSFILE'} = $self->{'props'}->{'pg-passfile'} if $self->{'props'}->{'pg-passfile'};
 
-    my @cmd = ($self->{'props'}->{'PSQL-PATH'});
-    push @cmd, "-h", $self->{'props'}->{'PG-HOST'} if ($self->{'props'}->{'PG-HOST'});
-    push @cmd, "-p", $self->{'props'}->{'PG-PORT'} if ($self->{'props'}->{'PG-PORT'});
-    push @cmd, "-U", $self->{'props'}->{'PG-USER'} if ($self->{'props'}->{'PG-USER'});
+    my @cmd = ($self->{'props'}->{'psql-path'});
+    push @cmd, "-h", $self->{'props'}->{'pg-host'} if ($self->{'props'}->{'pg-host'});
+    push @cmd, "-p", $self->{'props'}->{'pg-port'} if ($self->{'props'}->{'pg-port'});
+    push @cmd, "-U", $self->{'props'}->{'pg-user'} if ($self->{'props'}->{'pg-user'});
 
-    push @cmd, '--quiet', '--output', '/dev/null', '--command', $cmd, $self->{'props'}->{'PG-DB'};
+    push @cmd, '--quiet', '--output', '/dev/null', '--command', $cmd, $self->{'props'}->{'pg-db'};
     debug("running " . join(" ", @cmd));
     my $status = system(@cmd);
 
@@ -186,52 +202,79 @@ sub _run_psql_command {
 }
 
 sub command_selfcheck {
-   my $self = shift;
+    my $self = shift;
 
-   for my $k (keys %{$self->{'args'}}) {
-       print "OK application property: $k = $self->{'args'}->{$k}\n";
-   }
+    for my $k (keys %{$self->{'args'}}) {
+        print "OK application property: $k = $self->{'args'}->{$k}\n";
+    }
 
-   _check("GNUTAR-PATH $self->{'args'}->{'gnutar-path'}", "is not executable",
-          sub {-x $_[0]}, $self->{'args'}->{'gnutar-path'});
-   _check("GNUTAR $Amanda::Constants::GNUTAR", "is not executable",
-          sub {-x $_[0]}, $Amanda::Constants::GNUTAR);
-   _check("TMPDIR $self->{'args'}->{'tmpdir'}", "is not an acessible directory",
-          sub {-d $_[0] && -r $_[0] && -w $_[0] && -x $_[0]},
-          $self->{'args'}->{'tmpdir'});
-   _check("STATEDIR $self->{'args'}->{'statedir'}", "is not an acessible directory",
-          sub {-d $_[0] && -r $_[0] && -w $_[0] && -x $_[0]},
-          $self->{'args'}->{'statedir'});
+    _check("GNUTAR-PATH $self->{'args'}->{'gnutar-path'}",
+           "is executable", "is NOT executable",
+           sub {-x $_[0]}, $self->{'args'}->{'gnutar-path'});
+    _check("GNUTAR-PATH $self->{'args'}->{'gnutar-path'}",
+           "is not a directory (okay)", "is a directory (it shouldn't be)",
+           sub {!(-d $_[0])}, $self->{'args'}->{'gnutar-path'});
+    _check_parent_dirs($self->{'args'}->{'gnutar-path'});
 
-   if ($self->{'args'}->{'device'}) {
-       for my $k (keys %{$self->{'props'}}) {
-           print "OK client property: $k = $self->{'props'}->{$k}\n";
-       }
+    _check("GNUTAR $Amanda::Constants::GNUTAR",
+           "is executable", "is NOT executable",
+           sub {-x $_[0]}, $Amanda::Constants::GNUTAR);
+    _check("GNUTAR $Amanda::Constants::GNUTAR",
+           "is not a directory (okay)", "is a directory (it shouldn't be)",
+           sub {!(-d $_[0])}, $Amanda::Constants::GNUTAR);
+    _check_parent_dirs($Amanda::Constants::GNUTAR);
 
-       _check("PG-DATADIR $self->{'props'}->{'PG-DATADIR'}", "is not a directory",
-              sub {-d $_[0]}, $self->{'props'}->{'PG-DATADIR'});
-       _check("PG-ARCHIVEDIR $self->{'props'}->{'PG-ARCHIVEDIR'}", "is not a directory",
-              sub {-d $_[0]}, $self->{'props'}->{'PG-ARCHIVEDIR'});
-       if ($self->{'props'}->{'PG-PASSFILE'}) {
-           _check("PG-PASSFILE $self->{'props'}->{'PG-PASSFILE'}",
-                  "does not have correct permissions",
-                  \&_ok_passfile_perms, $self->{'props'}->{'PG-PASSFILE'});
-       }
-       _check("PSQL-PATH $self->{'args'}->{'gnutar-path'}", "is not executable",
-              sub {-x $_[0]}, $self->{'props'}->{'PSQL-PATH'});
-       _check("connect to database server", "failed",
-              \&_run_psql_command, $self, '');
+    _check("TMPDIR $self->{'args'}->{'tmpdir'}",
+           "is an acessible directory", "is NOT an acessible directory",
+           sub {-d $_[0] && -r $_[0] && -w $_[0] && -x $_[0]},
+           $self->{'args'}->{'tmpdir'});
+    _check("STATEDIR $self->{'args'}->{'statedir'}",
+           "is an acessible directory", "is NOT an acessible directory",
+           sub {-d $_[0] && -r $_[0] && -w $_[0] && -x $_[0]},
+           $self->{'args'}->{'statedir'});
+    _check_parent_dirs($self->{'args'}->{'statedir'});
 
-       my $label = "$self->{'label-prefix'}-selfcheck-" . time();
-       if (_check("call pg_start_backup", "failed (is another backup running?)",
-                  \&_run_psql_command, $self, "SELECT pg_start_backup('$label')")
-           and _check("call pg_stop_backup", "failed",
-                  \&_run_psql_command, $self, "SELECT pg_stop_backup()")) {
+    if ($self->{'args'}->{'device'}) {
+        for my $k (keys %{$self->{'props'}}) {
+            print "OK client property: $k = $self->{'props'}->{$k}\n";
+        }
 
-           _check("get info from .backup file", "failed",
-                  sub {my ($start, $end) = _get_backup_info($self, $label); $start and $end});
-       }
-   }
+        _check("PG-ARCHIVEDIR $self->{'props'}->{'pg-archivedir'}",
+               "is a directory", "is NOT a directory",
+               sub {-d $_[0]}, $self->{'props'}->{'pg-archivedir'});
+        _check_parent_dirs($self->{'props'}->{'pg-archivedir'});
+        _check("Are both PG-PASSFILE and PG-PASSWORD set?",
+               "No (okay)",
+               "Yes. Please set only one or the other",
+               sub {!($self->{'props'}->{'pg-passfile'} and
+                      $self->{'props'}->{'pg-password'})});
+        if ($self->{'props'}->{'pg-passfile'}) {
+            _check("PG-PASSFILE $self->{'props'}->{'pg-passfile'}",
+                   "has correct permissions", "does not have correct permissions",
+                   \&_ok_passfile_perms, $self->{'props'}->{'pg-passfile'});
+            _check_parent_dirs($self->{'props'}->{'pg-passfile'});
+        }
+        _check("PSQL-PATH $self->{'props'}->{'psql-path'}",
+               "is executable", "is NOT executable",
+               sub {-x $_[0]}, $self->{'props'}->{'psql-path'});
+        _check("PSQL-PATH $self->{'props'}->{'psql-path'}",
+               "is not a directory (okay)", "is a directory (it shouldn't be)",
+               sub {!(-d $_[0])}, $self->{'props'}->{'psql-path'});
+        _check_parent_dirs($self->{'props'}->{'psql-path'});
+        _check("Connecting to database server", "succeeded", "failed",
+               \&_run_psql_command, $self, '');
+        
+        my $label = "$self->{'label-prefix'}-selfcheck-" . time();
+        if (_check("Call pg_start_backup", "succeeded",
+                   "failed (is another backup running?)",
+                   \&_run_psql_command, $self, "SELECT pg_start_backup('$label')")
+            and _check("Call pg_stop_backup", "succeeded", "failed",
+                       \&_run_psql_command, $self, "SELECT pg_stop_backup()")) {
+
+            _check("Get info from .backup file", "succeeded", "failed",
+                   sub {my ($start, $end) = _get_backup_info($self, $label); $start and $end});
+        }
+    }
 }
 
 sub _encode {
@@ -362,7 +405,7 @@ sub _get_backup_info {
    my ($fname, $bfile, $start_wal, $end_wal);
    # wait up to 60s for the .backup file to be copied
    for (my $count = 0; $count < 60; $count++) {
-       my $adir = new IO::Dir($self->{'props'}->{'PG-ARCHIVEDIR'});
+       my $adir = new IO::Dir($self->{'props'}->{'pg-archivedir'});
        $adir or $self->{'die_cb'}->("Could not open archive WAL directory");
        while (defined($fname = $adir->read())) {
            if ($fname =~ /\.backup$/) {
@@ -370,7 +413,7 @@ sub _get_backup_info {
                # use runtar to read protected file
                local *TAROUT;
                my $conf = $self->{'args'}->{'config'} || 'NOCONFIG';
-               my $cmd = "$self->{'runtar'} $conf $Amanda::Constants::GNUTAR --create --directory $self->{'props'}->{'PG-ARCHIVEDIR'} $fname | $Amanda::Constants::GNUTAR --extract --to-stdout";
+               my $cmd = "$self->{'runtar'} $conf $Amanda::Constants::GNUTAR --create --directory $self->{'props'}->{'pg-archivedir'} $fname | $Amanda::Constants::GNUTAR --extract --to-stdout";
                debug("running: $cmd");
                open(TAROUT, "$cmd |");
                my ($start, $end, $lab);
@@ -395,7 +438,7 @@ sub _get_backup_info {
        $adir->close();
        if ($start_wal and $end_wal) {
            # try to cleanup a bit
-           unlink("$self->{'props'}->{'PG-ARCHIVEDIR'}/$bfile");
+           unlink("$self->{'props'}->{'pg-archivedir'}/$bfile");
            last;
        }
        sleep(1);
@@ -412,8 +455,7 @@ sub _base_backup {
    my $label = "$self->{'label-prefix'}-" . time();
    my $tmp = "$self->{'args'}->{'tmpdir'}/$label";
 
-   -d $self->{'props'}->{'PG-DATADIR'} or confess("Data directory does not exist (or is not a directory)");
-   -d $self->{'props'}->{'PG-ARCHIVEDIR'} or confess("WAL file archive directory does not exist (or is not a directory)");
+   -d $self->{'props'}->{'pg-archivedir'} or confess("WAL file archive directory does not exist (or is not a directory)");
 
    # try to protect what we create
    my $old_umask = umask();
@@ -447,7 +489,7 @@ sub _base_backup {
        $old_die_cb->($msg);
    };
    _run_tar_totals($self, '--file', "$tmp/$_DATA_DIR_TAR",
-       '--directory', $self->{'props'}->{'PG-DATADIR'}, ".");
+       '--directory', $self->{'props'}->{'pg-datadir'}, ".");
    $self->{'die_cb'} = $old_die_cb;
 
    unless (_run_psql_command($self, "SELECT pg_stop_backup()")) {
@@ -457,18 +499,19 @@ sub _base_backup {
    # determine WAL files and append and create their tar file
    my ($start_wal, $end_wal) = _get_backup_info($self, $label);
 
-   ($start_wal and $end_wal) or $self->{'die_cb'}->("A .backup file was never found in the archive dir $self->{'props'}->{'PG-ARCHIVEDIR'}");
+   ($start_wal and $end_wal) or $self->{'die_cb'}->("A .backup file was never found in the archive dir $self->{'props'}->{'pg-archivedir'}");
    debug("WAL start: $start_wal end: $end_wal");
 
    my @wal_files;
-   my $adir = new IO::Dir($self->{'props'}->{'PG-ARCHIVEDIR'});
+   my $adir = new IO::Dir($self->{'props'}->{'pg-archivedir'});
    while (defined(my $fname = $adir->read())) {
        if ($fname =~ /^$_WAL_FILE_PAT$/) {
            if (($fname ge $start_wal) and ($fname le $end_wal)) {
                push @wal_files, $fname;
                debug("will store: $fname");
            } elsif ($fname lt $start_wal) {
-               $self->{'unlink_cb'}->($fname);
+               debug("will delete: $fname");
+               $self->{'unlink_cb'}->("$self->{'props'}->{'PG-ARCHIVEDIR'}/$fname");
            }
        }
    }
@@ -478,7 +521,7 @@ sub _base_backup {
    @wal_files or @wal_files = ('--files-from', '/dev/null');
 
    _run_tar_totals($self, '--file', "$tmp/$_ARCHIVE_DIR_TAR",
-       '--directory', $self->{'props'}->{'PG-ARCHIVEDIR'}, @wal_files);
+       '--directory', $self->{'props'}->{'pg-archivedir'}, @wal_files);
 
    # create the final tar file
    my $size = _run_tar_totals($self, '--directory', $tmp,
@@ -503,7 +546,7 @@ sub _incr_backup {
        return _base_backup(@_);
    }
 
-   my $adir = new IO::Dir($self->{'props'}->{'PG-ARCHIVEDIR'});
+   my $adir = new IO::Dir($self->{'props'}->{'pg-archivedir'});
    $adir or $self->{'die_cb'}->("Could not open archive WAL directory");
    my $max_wal = "";
    my ($fname, @wal_files);
@@ -519,7 +562,7 @@ sub _incr_backup {
 
    if (@wal_files) {
        $self->{'done_cb'}->(_run_tar_totals($self,
-           '--directory', $self->{'props'}->{'PG-ARCHIVEDIR'}, @wal_files));
+           '--directory', $self->{'props'}->{'pg-archivedir'}, @wal_files));
    } else {
        $self->{'done_cb'}->(0);
    }
@@ -557,7 +600,7 @@ sub command_backup {
        _write_state_file($self, $end_wal) or $self->{'die_cb'}->("Failed to write state file");
    };
    # simulate amanda.conf boolean style
-   if ($self->{'props'}->{'PG-CLEANUPWAL'} =~ /^(f|false|n|no|off)/i) {
+   if ($self->{'props'}->{'pg-cleanupwal'} =~ /^(f|false|n|no|off)/i) {
        $self->{'unlink_cb'} = sub {
            # do nothing
        };
@@ -650,7 +693,7 @@ GetOptions(
     # ampgsql-specific
     'statedir=s',
     'tmpdir=s',
-    'gnutar=s',
+    'gnutar-path=s',
 ) or usage();
 
 my $application = Amanda::Application::ampgsql->new($opts);

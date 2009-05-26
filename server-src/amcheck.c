@@ -73,7 +73,7 @@ int test_server_pgm(FILE *outf, char *dir, char *pgm, int suid, uid_t dumpuid);
 void
 usage(void)
 {
-    error(_("Usage: amcheck%s [-am] [-w] [-sclt] [-M <address>] <conf> [host [disk]* ]* [-o configoption]*"), versionsuffix());
+    error(_("Usage: amcheck%s [-am] [-w] [-sclt] [-M <address>] [-o configoption]* <conf> [host [disk]* ]*"), versionsuffix());
     /*NOTREACHED*/
 }
 
@@ -139,7 +139,7 @@ main(
 
     g_snprintf(pid_str, SIZEOF(pid_str), "%ld", (long)getpid());
 
-    erroutput_type = ERR_INTERACTIVE;
+    add_amanda_log_handler(amanda_log_stderr);
 
     our_features = am_init_feature_set();
     our_feature_string = am_feature_to_string(our_features);
@@ -1504,12 +1504,6 @@ start_host(
 
     if(hostp->up != HOST_READY) {
 	return;
-    }
-
-    if (strcmp(hostp->hostname,"localhost") == 0) {
-	g_fprintf(outf,
-                    _("WARNING: Usage of fully qualified hostname recommended for Client %s.\n"),
-                    hostp->hostname);
     }
 
     /*

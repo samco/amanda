@@ -1,19 +1,19 @@
 #! @PERL@
 # Copyright (c) 2005-2008 Zmanda Inc.  All Rights Reserved.
-# 
+#
 # This program is free software; you can redistribute it and/or modify it
-# under the terms of the GNU General Public License version 2 as published 
+# under the terms of the GNU General Public License version 2 as published
 # by the Free Software Foundation.
-# 
+#
 # This program is distributed in the hope that it will be useful, but
 # WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
 # or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 # for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License along
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
-# 
+#
 # Contact information: Zmanda Inc., 465 S Mathlida Ave, Suite 300
 # Sunnyvale, CA 94086, USA, or: http://www.zmanda.com
 
@@ -36,7 +36,6 @@ sub try_read_label {
     if ($device->status() != $DEVICE_STATUS_SUCCESS ) {
         $result = $device->status();
     }
-    print_result($result, $device->error() );
     return $result;
 }
 
@@ -91,12 +90,14 @@ Amanda::Util::setup_application("amdevcheck", "server", $CONTEXT_SCRIPTUTIL);
 my $config_overwrites = new_config_overwrites($#ARGV+1);
 my $getproplist;
 my $device_name;
+my $print_label;
 
 Getopt::Long::Configure(qw(bundling));
 GetOptions(
     'help|usage|?' => \&usage,
     'o=s' => sub { add_config_overwrite_opt($config_overwrites, $_[1]); },
-    'properties:s' => \$getproplist
+    'properties:s' => \$getproplist,
+    'label' => \$print_label
 ) or usage();
 
 usage() if ( @ARGV < 1 || @ARGV > 3 );
@@ -116,6 +117,9 @@ Amanda::Util::finish_setup($RUNNING_AS_DUMPUSER);
 
 my $result;
 
+if (defined $getproplist && defined $print_label) {
+    die("Can't set both --label and --properties");
+}
 if ( $#ARGV == 1 ) {
     $device_name = $ARGV[1];
 } else {
@@ -127,16 +131,31 @@ if ( !$device ) {
     die("Error creating $device_name");
 }
 
-if ($device->status() == $DEVICE_STATUS_SUCCESS) {
+$result = $device->status();
+if ($result == $DEVICE_STATUS_SUCCESS) {
     $device->configure(1);
-    if(defined $getproplist ) {
-	list_device_property($device,$getproplist);
+    if (defined $getproplist) {
+        list_device_property($device,$getproplist);
+        exit 0;
+    }
+    $result = try_read_label($device);
+    if (defined $print_label) {
+        if ($result == $DEVICE_STATUS_SUCCESS) {
+            print $device->volume_label(), "\n";
+            exit 0;
+        } else {
+            exit 1;
+	}
+    } else {
+        print_result($result, $device->error());
 	exit 0;
     }
-    try_read_label($device);
-    exit 0;
 } else {
-    $result = $device->status();
-    print $result;
-    exit 1;
+    if (!defined $getproplist && !defined $print_label) {
+        print_result($result, $device->error());
+        exit 0;
+    } else {
+        exit 1;
+    }
 }
+exit 0;

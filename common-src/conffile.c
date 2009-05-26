@@ -1255,6 +1255,8 @@ conf_var_t changer_config_var [] = {
    { CONF_TPCHANGER       , CONFTYPE_STR      , read_str      , CHANGER_CONFIG_TPCHANGER      , NULL },
    { CONF_CHANGERDEV      , CONFTYPE_STR      , read_str      , CHANGER_CONFIG_CHANGERDEV     , NULL },
    { CONF_CHANGERFILE     , CONFTYPE_STR      , read_str      , CHANGER_CONFIG_CHANGERFILE    , NULL },
+   { CONF_PROPERTY        , CONFTYPE_PROPLIST , read_property , CHANGER_CONFIG_PROPERTY       , NULL },
+   { CONF_DEVICE_PROPERTY , CONFTYPE_PROPLIST , read_property , CHANGER_CONFIG_DEVICE_PROPERTY, NULL },
    { CONF_UNKNOWN         , CONFTYPE_INT      , NULL          , CHANGER_CONFIG_CHANGER_CONFIG , NULL }
 };
 
@@ -2792,6 +2794,8 @@ init_changer_config_defaults(
     conf_init_str(&cccur.value[CHANGER_CONFIG_TPCHANGER]  , "");
     conf_init_str(&cccur.value[CHANGER_CONFIG_CHANGERDEV]  , "");
     conf_init_str(&cccur.value[CHANGER_CONFIG_CHANGERFILE]  , "");
+    conf_init_proplist(&cccur.value[CHANGER_CONFIG_PROPERTY]);
+    conf_init_proplist(&cccur.value[CHANGER_CONFIG_DEVICE_PROPERTY]);
 }
 
 static void
@@ -5361,8 +5365,54 @@ extract_commandline_config_overwrites(
     return co;
 }
 
+static cfgerr_level_t internal_apply_config_overwrites(config_overwrites_t *co);
+
 cfgerr_level_t
 apply_config_overwrites(
+    config_overwrites_t *co)
+{
+    int i;
+
+    if(!co) return cfgerr_level;
+    assert(keytable != NULL);
+    assert(parsetable != NULL);
+
+    cfgerr_level = internal_apply_config_overwrites(co);
+
+    /* merge these overwrites with previous overwrites, if necessary */
+    if (applied_config_overwrites) {
+	for (i = 0; i < co->n_used; i++) {
+	    char *key = co->ovr[i].key;
+	    char *value = co->ovr[i].value;
+
+	    add_config_overwrite(applied_config_overwrites, key, value);
+	}
+	free_config_overwrites(co);
+    } else {
+	applied_config_overwrites = co;
+    }
+
+    update_derived_values(config_client);
+
+    return cfgerr_level;
+}
+
+cfgerr_level_t
+reapply_config_overwrites(void)
+{
+    if(!applied_config_overwrites) return cfgerr_level;
+    assert(keytable != NULL);
+    assert(parsetable != NULL);
+
+    cfgerr_level = internal_apply_config_overwrites(applied_config_overwrites);
+
+    update_derived_values(config_client);
+
+    return cfgerr_level;
+}
+
+static cfgerr_level_t
+internal_apply_config_overwrites(
     config_overwrites_t *co)
 {
     int i;
@@ -5403,21 +5453,6 @@ apply_config_overwrites(
 	amfree(current_line);
 	current_char = NULL;
     }
-
-    /* merge these overwrites with previous overwrites, if necessary */
-    if (applied_config_overwrites) {
-	for (i = 0; i < co->n_used; i++) {
-	    char *key = co->ovr[i].key;
-	    char *value = co->ovr[i].value;
-
-	    add_config_overwrite(applied_config_overwrites, key, value);
-	}
-	free_config_overwrites(co);
-    } else {
-	applied_config_overwrites = co;
-    }
-
-    update_derived_values(config_client);
 
     return cfgerr_level;
 }

@@ -508,6 +508,8 @@ amglue_add_constant(CHANGER_CONFIG_TAPEDEV, changer_config_key);
 amglue_add_constant(CHANGER_CONFIG_TPCHANGER, changer_config_key);
 amglue_add_constant(CHANGER_CONFIG_CHANGERDEV, changer_config_key);
 amglue_add_constant(CHANGER_CONFIG_CHANGERFILE, changer_config_key);
+amglue_add_constant(CHANGER_CONFIG_PROPERTY, changer_config_key);
+amglue_add_constant(CHANGER_CONFIG_DEVICE_PROPERTY, changer_config_key);
 amglue_copy_to_tag(changer_config_key, getconf);
 
 /*
@@ -978,6 +980,7 @@ void add_config_overwrite(config_overwrites_t *co,
 void add_config_overwrite_opt(config_overwrites_t *co,
 			      char *optarg);
 cfgerr_level_t apply_config_overwrites(config_overwrites_t *co);
+cfgerr_level_t reapply_config_overwrites(void);
 
 amglue_export_tag(init,
     config_init config_uninit get_config_options
@@ -985,6 +988,7 @@ amglue_export_tag(init,
     config_print_errors config_clear_errors config_errors
     new_config_overwrites free_config_overwrites add_config_overwrite
     add_config_overwrite_opt apply_config_overwrites
+    reapply_config_overwrites
 );
 
 /*

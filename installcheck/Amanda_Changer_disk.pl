@@ -57,7 +57,7 @@ sub reset_taperoot {
 sub is_pointing_to {
     my ($res, $slot, $msg) = @_;
 
-    my ($datalink) = ($res->{'device_name'} =~ /file:(.*)/);
+    my ($datalink) = ($res->{'device'}->device_name =~ /file:(.*)/);
     $datalink .= "/data";
     is(readlink($datalink), "../slot$slot", $msg);
 }
@@ -224,7 +224,7 @@ die($chg) if $chg->isa("Amanda::Changer::Error");
     my ($get_info, $load_label, $check_load_cb) = @_;
 
     $get_info = make_cb('get_info' => sub {
-        $chg->info(info_cb => $load_label, info => [ 'num_slots' ]);
+        $chg->info(info_cb => $load_label, info => [ 'num_slots', 'fast_search' ]);
     });
 
     $load_label = make_cb('load_label' => sub {
@@ -232,7 +232,9 @@ die($chg) if $chg->isa("Amanda::Changer::Error");
         my %results = @_;
         die($err) if defined($err);
 
-        is($results{'num_slots'}, 5, "info() returns the correct num_slots");
+        is_deeply({ %results },
+	    { num_slots => 5, fast_search => 1 },
+	    "info() returns the correct num_slots and fast_search");
 
         # note use of a glob metacharacter in the label name
         $chg->load(label => "FOO?BAR", res_cb => $check_load_cb);

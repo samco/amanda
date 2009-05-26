@@ -10,6 +10,7 @@ common_tests = \
 	Amanda_Archive \
 	Amanda_Config \
 	Amanda_Debug \
+	Amanda_IPC_LineProtocol \
 	Amanda_MainLoop \
 	Amanda_Header \
 	Amanda_Util \
@@ -37,6 +38,7 @@ server_tests = \
 	Amanda_Process \
 	Amanda_Xfer_serveronly \
 	bigint \
+	taper \
 	amgetconf \
 	amtapetype
 

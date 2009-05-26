@@ -214,8 +214,8 @@ main(
     /* Don't die when child closes pipe */
     signal(SIGPIPE, SIG_IGN);
 
-    erroutput_type = (ERR_AMANDALOG|ERR_INTERACTIVE);
-    set_logerror(logerror);
+    add_amanda_log_handler(amanda_log_stderr);
+    add_amanda_log_handler(amanda_log_trace_log);
 
     startclock();
 
@@ -1533,8 +1533,8 @@ handle_taper_result(
             if(!nodump) {
                 log_add(L_WARNING,
                         _("going into degraded mode because of taper component error."));
-                start_degraded_mode(&runq);
-            }
+	    }
+	    start_degraded_mode(&runq);
             tapeq.head = tapeq.tail = NULL;
             taper_busy = 0;
             if(taper_ev_read != NULL) {
@@ -2658,6 +2658,7 @@ read_schedule(
     if(need_degraded==1) start_degraded_mode(&runq);
     schedule_done = 1;
     start_some_dumps(&runq);
+    startaflush();
 }
 
 static unsigned long

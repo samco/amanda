@@ -109,7 +109,7 @@ sub find_next_device {
     # hack until all of amcheckdump is event-based.
     Amanda::MainLoop::run();
 
-    return $reservation->{device_name};
+    return $reservation->{'device'};
 }
 
 # Try to open a device containing a volume with the given label.  Returns undef
@@ -125,23 +125,8 @@ sub try_open_device {
     # nope -- get rid of that device
     close_device();
 
-    my $device_name = find_next_device($label);
-    if ( !$device_name ) {
-	print "Could not find a device for label '$label'.\n";
-        return undef;
-    }
-
-    my $device = Amanda::Device->new($device_name);
-    if ($device->status() != $DEVICE_STATUS_SUCCESS) {
-	print "Could not open device $device_name: ",
-	      $device->error_or_status(), ".\n";
-	return undef;
-    }
-    if (!$device->configure(1)) {
-	print "Could not configure device $device_name: ",
-	      $device->error_or_status(), ".\n";
-	return undef;
-    }
+    my $device = find_next_device($label);
+    my $device_name = $device->device_name;
 
     my $label_status = $device->read_label();
     if ($label_status != $DEVICE_STATUS_SUCCESS) {
@@ -203,6 +188,7 @@ sub open_validation_app {
 	and $current_validation_image->{diskname} eq $image->{diskname}
 	and $current_validation_image->{level} == $image->{level}) {
 	# TODO: also check that the part number is correct
+        print("Dump was successfully validated.\n");
         print "Continuing with previously started validation process.\n";
 	return $current_validation_pipeline;
     }
@@ -235,8 +221,10 @@ sub close_validation_app {
     # first close the applications standard input to signal it to stop
     if (!close($current_validation_pipeline)) {
 	my $exit_value = $? >> 8;
-	print "Validation process returned $exit_value (full status $?)\n";
+	print "Dump was not successfully validated: Validation process returned $exit_value (full status $?)\n";
 	$all_success = 0; # flag this as a failure
+    } else {
+        print("Dump was successfully validated.\n");
     }
 
     $current_validation_pid = undef;
@@ -523,9 +511,14 @@ for my $image (@images) {
     $check->($device->status() == $DEVICE_STATUS_SUCCESS,
       "Error reading device: " . $device->error_or_status());
     # if we make it here, the device was ok, but the read perhaps wasn't
-    $check->($read_ok, "Error writing data to validation command");
-
-    print("Dump was successfully validated.\n");
+    if (!$read_ok) {
+        my $errmsg = $queue_fd->{errmsg};
+        if (defined $errmsg && length($errmsg) > 0) {
+            $check->($read_ok, "Error writing data to validation command: $errmsg");
+	} else {
+            $check->($read_ok, "Error writing data to validation command: Unknown reason");
+	}
+    }
 }
 
 if (defined $reservation) {

@@ -334,8 +334,8 @@ main(
     /* Don't die when child closes pipe */
     signal(SIGPIPE, SIG_IGN);
 
-    erroutput_type = (ERR_AMANDALOG|ERR_INTERACTIVE);
-    set_logerror(logerror);
+    add_amanda_log_handler(amanda_log_stderr);
+    add_amanda_log_handler(amanda_log_trace_log);
 
     cfg_ovr = extract_commandline_config_overwrites(&argc, &argv);
     if (argc > 1)
@@ -1036,23 +1036,38 @@ finish_tapeheader(
     if (srvencrypt != ENCRYPT_NONE) {
       file->encrypted= 1;
       if (srvencrypt == ENCRYPT_SERV_CUST) {
-	g_snprintf(file->decrypt_cmd, SIZEOF(file->decrypt_cmd),
-		 " %s %s |", srv_encrypt, srv_decrypt_opt); 
+	if (srv_decrypt_opt) {
+	  g_snprintf(file->decrypt_cmd, SIZEOF(file->decrypt_cmd),
+		   " %s %s |", srv_encrypt, srv_decrypt_opt); 
+	  strncpy(file->srv_decrypt_opt, srv_decrypt_opt, SIZEOF(file->srv_decrypt_opt) - 1);
+	  file->srv_decrypt_opt[SIZEOF(file->srv_decrypt_opt) - 1] = '\0';
+	} else {
+	  g_snprintf(file->decrypt_cmd, SIZEOF(file->decrypt_cmd),
+		   " %s |", srv_encrypt); 
+	  file->srv_decrypt_opt[0] = '\0';
+	}
 	strncpy(file->encrypt_suffix, "enc", SIZEOF(file->encrypt_suffix) - 1);
 	file->encrypt_suffix[SIZEOF(file->encrypt_suffix) - 1] = '\0';
 	strncpy(file->srv_encrypt, srv_encrypt, SIZEOF(file->srv_encrypt) - 1);
 	file->srv_encrypt[SIZEOF(file->srv_encrypt) - 1] = '\0';
-	strncpy(file->srv_decrypt_opt, srv_decrypt_opt, SIZEOF(file->srv_decrypt_opt) - 1);
-	file->srv_decrypt_opt[SIZEOF(file->srv_decrypt_opt) - 1] = '\0';
       } else if ( srvencrypt == ENCRYPT_CUST ) {
+	if (clnt_decrypt_opt) {
+	  g_snprintf(file->decrypt_cmd, SIZEOF(file->decrypt_cmd),
+		   " %s %s |", clnt_encrypt, clnt_decrypt_opt);
+	  strncpy(file->clnt_decrypt_opt, clnt_decrypt_opt,
+		  SIZEOF(file->clnt_decrypt_opt));
+	  file->clnt_decrypt_opt[SIZEOF(file->clnt_decrypt_opt) - 1] = '\0';
+	} else {
+	  g_snprintf(file->decrypt_cmd, SIZEOF(file->decrypt_cmd),
+		   " %s |", clnt_encrypt);
+	  file->clnt_decrypt_opt[0] = '\0';
+ 	}
 	g_snprintf(file->decrypt_cmd, SIZEOF(file->decrypt_cmd),
 		 " %s %s |", clnt_encrypt, clnt_decrypt_opt);
 	strncpy(file->encrypt_suffix, "enc", SIZEOF(file->encrypt_suffix) - 1);
 	file->encrypt_suffix[SIZEOF(file->encrypt_suffix) - 1] = '\0';
 	strncpy(file->clnt_encrypt, clnt_encrypt, SIZEOF(file->clnt_encrypt) - 1);
 	file->clnt_encrypt[SIZEOF(file->clnt_encrypt) - 1] = '\0';
-	strncpy(file->clnt_decrypt_opt, clnt_decrypt_opt, SIZEOF(file->clnt_decrypt_opt));
-	file->clnt_decrypt_opt[SIZEOF(file->clnt_decrypt_opt) - 1] = '\0';
       }
     } else {
       if (file->encrypt_suffix[0] == '\0') {
@@ -1081,6 +1096,8 @@ write_tapeheader(
     char * buffer;
     size_t written;
 
+    if (debug_dumper > 1)
+	dump_dumpfile_t(file);
     buffer = build_header(file, NULL, DISK_BLOCK_BYTES);
     if (!buffer) /* this shouldn't happen */
 	error(_("header does not fit in %zd bytes"), (size_t)DISK_BLOCK_BYTES);

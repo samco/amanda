@@ -39,15 +39,13 @@ Amanda::Changer::null
 This changer always returns reservations for null devices.  It is useful to add
 a null device to a RAIT device configuration.  It takes no arguments.
 
-=head1 USAGE
-
-Specify this changer as C<chg-null:>.
+See the amanda-changers(7) manpage for usage information.
 
 =cut
 
 sub new {
     my $class = shift;
-    my ($cc, $tpchanger) = @_;
+    my ($config, $tpchanger) = @_;
 
     return bless ({}, $class);
 }
@@ -67,6 +65,8 @@ sub info_key {
     return if $self->check_error($params{'info_cb'});
 
     if ($key eq 'num_slots') {
+	$results{$key} = 1;
+    } elsif ($key eq 'fast_search') {
 	$results{$key} = 1;
     }
 
@@ -89,7 +89,7 @@ sub new {
     my $class = shift;
     my $self = Amanda::Changer::Reservation::new($class);
 
-    $self->{'device_name'} = "null:";
+    $self->{'device'} = Amanda::Device->new("null:");
     $self->{'this_slot'} = "null";
     $self->{'next_slot'} = "null";
 

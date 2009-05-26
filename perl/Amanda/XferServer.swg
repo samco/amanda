@@ -29,6 +29,7 @@
 #include "glib-util.h"
 #include "amxfer.h"
 #include "xfer-device.h"
+#include "xfer-server.h"
 %}
 
 %perlcode %{
@@ -56,7 +57,7 @@ XferElement *xfer_dest_taper(
     size_t max_memory,
     guint64 part_size,
     gboolean use_mem_cache,
-    const char *disk_cache_filename);
+    const char *disk_cache_dirname);
 
 %newobject xfer_source_holding;
 XferElement * xfer_source_holding(

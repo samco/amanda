@@ -112,7 +112,7 @@ main(
 
     dbopen(DBG_SUBDIR_SERVER);
 
-    erroutput_type = ERR_INTERACTIVE;
+    add_amanda_log_handler(amanda_log_stderr);
     foreground = 0;
     batch = 0;
     redirect = 1;
@@ -149,7 +149,7 @@ main(
     }
 
     if(argc < 1) {
-	error(_("Usage: amflush%s [-b] [-f] [-s] [-D date]* <confdir> [host [disk]* ]* [-o configoption]*"), versionsuffix());
+	error(_("Usage: amflush%s [-b] [-f] [-s] [-D date]* [-o configoption]* <confdir> [host [disk]* ]*"), versionsuffix());
 	/*NOTREACHED*/
     }
 
@@ -285,8 +285,8 @@ main(
 
     if(!foreground) detach();
 
-    erroutput_type = (ERR_AMANDALOG|ERR_INTERACTIVE);
-    set_logerror(logerror);
+    add_amanda_log_handler(amanda_log_stderr);
+    add_amanda_log_handler(amanda_log_trace_log);
     today = time(NULL);
     tm = localtime(&today);
     if (tm) {

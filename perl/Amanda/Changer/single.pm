@@ -43,17 +43,13 @@ into something similar to the old C<chg-manual>.
 Whatever you load, you get the volume in the drive.  The volume's either
 reserved or not.  All pretty straightforward.
 
-=head1 TODO
-
-Support notifying the user that a tape is required, and some kind of "OK,
-loaded" feedback mechanism -- perhaps a utility script of some sort, or an
-amtape subcommand?
+See the amanda-changers(7) manpage for usage information.
 
 =cut
 
 sub new {
     my $class = shift;
-    my ($cc, $tpchanger) = @_;
+    my ($config, $tpchanger) = @_;
     my ($device_name) = ($tpchanger =~ /chg-single:(.*)/);
 
     # check that $device_name is an honest-to-goodness device
@@ -65,6 +61,7 @@ sub new {
     }
 
     my $self = {
+	config => $config,
 	device_name => $device_name,
 	reserved => 0,
     };
@@ -87,8 +84,21 @@ sub load {
 	    message => "'$self->{device_name}' is already reserved");
     }
 
-    $params{'res_cb'} and $params{'res_cb'}->(
-	    undef, Amanda::Changer::single::Reservation->new($self));
+    my $device = Amanda::Device->new($self->{'device_name'});
+    if ($device->status() != $DEVICE_STATUS_SUCCESS) {
+	return $self->make_error("fatal", $params{'res_cb'},
+	    message => "error opening device '$self->{device_name}': " . $device->error_or_status());
+    }
+
+    if (my $msg = $self->{'config'}->configure_device($device)) {
+	# a failure to configure a device is fatal, since it's probably
+	# a user configuration error (and thus unlikely to work for the
+	# next device, either)
+	return $self->make_error("fatal", $params{'res_cb'},
+	    message => $msg);
+    }
+
+    $params{'res_cb'}->(undef, Amanda::Changer::single::Reservation->new($self, $device));
 }
 
 sub info_key {
@@ -99,6 +109,10 @@ sub info_key {
     return if $self->check_error($params{'info_cb'});
 
     if ($key eq 'num_slots') {
+	$results{$key} = 1;
+    } elsif ($key eq 'fast_search') {
+	# (asking the user for a specific label is faster than asking
+	# for each "slot" in a sequential scan, so search is "fast")
 	$results{$key} = 1;
     }
 
@@ -111,12 +125,13 @@ use vars qw( @ISA );
 
 sub new {
     my $class = shift;
-    my ($chg, $drive, $next_slot) = @_;
+    my ($chg, $device) = @_;
     my $self = Amanda::Changer::Reservation::new($class);
 
     $self->{'chg'} = $chg;
 
-    $self->{'device_name'} = $chg->{'device_name'};
+    $self->{'device'} = $device;
+
     $self->{'this_slot'} = '1';
     $self->{'next_slot'} = '1';
     $chg->{'reserved'} = 1;

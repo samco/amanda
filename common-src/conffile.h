@@ -1016,6 +1016,8 @@ typedef enum {
     CHANGER_CONFIG_TPCHANGER,
     CHANGER_CONFIG_CHANGERDEV,
     CHANGER_CONFIG_CHANGERFILE,
+    CHANGER_CONFIG_PROPERTY,
+    CHANGER_CONFIG_DEVICE_PROPERTY,
     CHANGER_CONFIG_CHANGER_CONFIG
 } changer_config_key;
 
@@ -1183,6 +1185,7 @@ extract_commandline_config_overwrites(int *argc,
  * @returns: current error level
  */
 cfgerr_level_t apply_config_overwrites(config_overwrites_t *co);
+cfgerr_level_t reapply_config_overwrites(void);
 
 /*
  * Initialization

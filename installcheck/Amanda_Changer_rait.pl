@@ -16,7 +16,7 @@
 # Contact information: Zmanda Inc, 465 S Mathlida Ave, Suite 300
 # Sunnyvale, CA 94086, USA, or: http://www.zmanda.com
 
-use Test::More tests => 34;
+use Test::More tests => 42;
 use File::Path;
 use strict;
 
@@ -107,7 +107,7 @@ label_vtape(3,4,"mytape");
     );
 
     $get_info = make_cb('get_info' => sub {
-        $chg->info(info_cb => $check_info, info => [ 'num_slots', 'vendor_string' ]);
+        $chg->info(info_cb => $check_info, info => [ 'num_slots', 'vendor_string', 'fast_search' ]);
     });
 
     $check_info = make_cb('check_info' => sub {
@@ -118,6 +118,8 @@ label_vtape(3,4,"mytape");
 	    "info() returns the correct num_slots");
         is($results{'vendor_string'}, '{chg-disk,chg-disk,chg-disk}',
 	    "info() returns the correct vendor string");
+        is($results{'fast_search'}, 1,
+	    "info() returns the correct fast_search");
 
 	$do_load_current->();
     });
@@ -130,7 +132,7 @@ label_vtape(3,4,"mytape");
 	my ($err, $res) = @_;
 	ok(!$err, "no error loading slot 'current'")
 	    or diag($err);
-	is($res->{'device_name'},
+	is($res->{'device'}->device_name,
 	   "rait:{file:$tapebase/1/drive0,file:$tapebase/2/drive0,file:$tapebase/3/drive0}",
 	    "returns correct device name");
 	is($res->{'this_slot'}, '{1,1,1}',
@@ -152,7 +154,7 @@ label_vtape(3,4,"mytape");
 	my ($err, $res) = @_;
 	ok(!$err, "no error loading slot 'next'")
 	    or diag($err);
-	is($res->{'device_name'},
+	is($res->{'device'}->device_name,
 	   "rait:{file:$tapebase/1/drive0,file:$tapebase/2/drive0,file:$tapebase/3/drive0}",
 	    "returns correct device name");
 	is($res->{'this_slot'}, '{2,2,2}',
@@ -174,7 +176,7 @@ label_vtape(3,4,"mytape");
 	my ($err, $res) = @_;
 	ok(!$err, "no error loading slot 'label'")
 	    or diag($err);
-	is($res->{'device_name'},
+	is($res->{'device'}->device_name,
 	   "rait:{file:$tapebase/1/drive0,file:$tapebase/2/drive0,file:$tapebase/3/drive0}",
 	    "returns correct device name");
 	is($res->{'this_slot'}, '{1,3,4}',
@@ -194,7 +196,7 @@ label_vtape(3,4,"mytape");
 	my ($err, $res) = @_;
 	ok(!$err, "no error loading slot '{1,2,3}'")
 	    or diag($err);
-	is($res->{'device_name'},
+	is($res->{'device'}->device_name,
 	   "rait:{file:$tapebase/1/drive0,file:$tapebase/2/drive0,file:$tapebase/3/drive0}",
 	    "returns correct device name");
 	is($res->{'this_slot'}, '{1,2,3}',
@@ -215,7 +217,7 @@ label_vtape(3,4,"mytape");
 	my ($err, $res) = @_;
 	ok(!$err, "no error loading slot '2'")
 	    or diag($err);
-	is($res->{'device_name'},
+	is($res->{'device'}->device_name,
 	   "rait:{file:$tapebase/1/drive0,file:$tapebase/2/drive0,file:$tapebase/3/drive0}",
 	    "returns correct device name");
 	is($res->{'this_slot'}, '{2,2,2}',
@@ -275,7 +277,7 @@ label_vtape(3,4,"mytape");
     );
 
     $get_info = make_cb('get_info' => sub {
-        $chg->info(info_cb => $check_info, info => [ 'num_slots' ]);
+        $chg->info(info_cb => $check_info, info => [ 'num_slots', 'fast_search' ]);
     });
 
     $check_info = make_cb('check_info' => sub {
@@ -284,6 +286,7 @@ label_vtape(3,4,"mytape");
         die($err) if defined($err);
 
         is($results{'num_slots'}, 4, "info() returns the correct num_slots");
+        is($results{'fast_search'}, 1, "info() returns the correct fast_search");
 
 	$do_load_current->();
     });
@@ -296,12 +299,12 @@ label_vtape(3,4,"mytape");
 	my ($err, $res) = @_;
 	ok(!$err, "no error loading slot 'current'")
 	    or diag($err);
-	is($res->{'device_name'},
-	   "rait:{file:$tapebase/1/drive0,file:$tapebase/2/drive0}",
+	is($res->{'device'}->device_name,
+	   "rait:{file:$tapebase/1/drive0,file:$tapebase/2/drive0,MISSING}",
 	    "returns correct device name");
-	is($res->{'this_slot'}, '{1,1}',
+	is($res->{'this_slot'}, '{1,1,ERROR}',
 	    "returns correct 'this_slot' name");
-	is($res->{'next_slot'}, '{2,2}',
+	is($res->{'next_slot'}, '{2,2,ERROR}',
 	    "returns correct 'next_slot' name");
 
 	$res->release(finished_cb => $do_load_label);
@@ -318,10 +321,10 @@ label_vtape(3,4,"mytape");
 	my ($err, $res) = @_;
 	ok(!$err, "no error loading slot 'label'")
 	    or diag($err);
-	is($res->{'device_name'},
-	   "rait:{file:$tapebase/1/drive0,file:$tapebase/2/drive0}",
+	is($res->{'device'}->device_name,
+	   "rait:{file:$tapebase/1/drive0,file:$tapebase/2/drive0,MISSING}",
 	    "returns correct device name");
-	is($res->{'this_slot'}, '{1,3}',
+	is($res->{'this_slot'}, '{1,3,ERROR}',
 	    "returns correct 'this_slot' name, even with different slots");
 
 	$do_reset->();
@@ -346,6 +349,66 @@ label_vtape(3,4,"mytape");
 
     # start the loop
     $get_info->();
+    Amanda::MainLoop::run();
+}
+
+##
+# Test configuring the device with device_property
+
+$testconf = Installcheck::Config->new();
+$testconf->add_changer("myrait", [
+    tpchanger => "\"chg-rait:chg-disk:$tapebase/{1,2,3}\"",
+    device_property => '"comment" "hello, world"',
+]);
+$testconf->write();
+
+config_uninit();
+$cfg_result = config_init($CONFIG_INIT_EXPLICIT_NAME, 'TESTCONF');
+if ($cfg_result != $CFGERR_OK) {
+    my ($level, @errors) = Amanda::Config::config_errors();
+    die(join "\n", @errors);
+}
+
+reset_taperoot();
+label_vtape(1,1,"mytape");
+label_vtape(2,2,"mytape");
+label_vtape(3,3,"mytape");
+
+{
+    my $chg = Amanda::Changer->new("myrait");
+    ok($chg->isa("Amanda::Changer::rait"), "Create RAIT device from a named config subsection");
+    my ($do_load_1, $got_res_1, $quit);
+
+    $do_load_1 = make_cb('do_load_1' => sub {
+	$chg->load(slot => "1", res_cb => $got_res_1);
+    });
+
+    $got_res_1 = make_cb('got_res_1' => sub {
+	my ($err, $res) = @_;
+	ok(!$err, "no error loading slot '1'")
+	    or diag($err);
+	is($res->{'device'}->device_name,
+	   "rait:{file:$tapebase/1/drive0,file:$tapebase/2/drive0,file:$tapebase/3/drive0}",
+	    "returns correct (full) device name");
+	is($res->{'this_slot'}, '{1,1,1}',
+	    "returns correct 'this_slot' name");
+	is($res->{'next_slot'}, '{2,2,2}',
+	    "returns correct 'next_slot' name");
+	is($res->{'device'}->property_get("comment"), "hello, world",
+	    "property from device_property appears on RAIT device");
+
+	$res->release(finished_cb => $quit);
+    });
+
+    $quit = make_cb('quit' => sub {
+	my ($err) = @_;
+	die $err if $err;
+
+	Amanda::MainLoop::quit();
+    });
+
+    # start the loop
+    $do_load_1->();
     Amanda::MainLoop::run();
 }
 

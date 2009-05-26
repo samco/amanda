@@ -41,6 +41,7 @@ use Amanda::MainLoop;
 use Amanda::Config qw( :init );
 use Amanda::Util qw( :constants );
 use Amanda::Debug qw( :logging );
+use Getopt::Long;
 
 my $chg;
 my $res;
@@ -50,7 +51,7 @@ sub err_result {
 
     my $exitstatus = 1;
 
-    if ($err->isa("Amanda:Changer::Error")) {
+    if ($err->isa("Amanda::Changer::Error")) {
 	$exitstatus = 2 if $err->fatal;
     } else {
 	# if $err is a string, then the error is fatal.
@@ -82,7 +83,7 @@ sub release_and_then {
     my ($release_opts, $andthen) = @_;
     if ($res) {
 	# release the current reservation, then call andthen
-	debug("releasing reservation of " . $res->{'device_name'});
+	debug("releasing reservation of " . $res->{'device'}->device_name);
 	$res->release(@$release_opts,
 	    finished_cb => sub {
 		my ($error) = @_;
@@ -127,7 +128,13 @@ sub do_slot {
 		if ($error) {
 		    err_result($error, \&getcmd);
 		} else {
-		    normal_result($res->{'this_slot'}, $res->{'device_name'}, \&getcmd);
+		    # get the name of the device so that the Amanda process
+		    # can open it.  This is not forward-compatible, but will
+		    # work for the current fleet of changers, as long as no
+		    # configuration or properties are in effect.
+		    normal_result($res->{'this_slot'},
+			    $res->{'device'}->device_name,
+			    \&getcmd);
 		}
 	    }
 	);
@@ -137,7 +144,7 @@ sub do_slot {
 }
 
 sub do_info {
-    $chg->info(info => [ 'num_slots' ],
+    $chg->info(info => [ 'num_slots', 'fast_search' ],
         info_cb => sub {
             my $error = shift;
             my %results = @_;
@@ -145,9 +152,9 @@ sub do_info {
             if ($error) {
 		err_result($error, \&getcmd);
             } else {
-                my $nslots = $results{'num_slots'};
-                $nslots = 0 unless defined $nslots;
-		normal_result("current", "$nslots 0 1", \&getcmd);
+                my $nslots = $results{'num_slots'} or 0;
+		my $searchable = $results{'fast_search'}? 1:0;
+		normal_result("current", "$nslots 1 $searchable", \&getcmd);
             }
         }
     );
@@ -212,7 +219,13 @@ sub do_search {
 		if ($error) {
 		    err_result($error, \&getcmd);
 		} else {
-		    normal_result($res->{'this_slot'}, $res->{'device_name'}, \&getcmd);
+		    # get the name of the device so that the Amanda process
+		    # can open it.  This is not forward-compatible, but will
+		    # work for the current fleet of changers, as long as no
+		    # configuration or properties are in effect.
+		    normal_result($res->{'this_slot'},
+				$res->{'device'}->device_name,
+				\&getcmd);
 		}
 	    }
 	);
@@ -230,7 +243,9 @@ sub do_label {
                 if ($error) {
 		    err_result($error, \&getcmd);
 		} else {
-		    normal_result($res->{'this_slot'}, $res->{'device_name'}, \&getcmd);
+		    normal_result($res->{'this_slot'},
+				$res->{'device'}->device_name,
+				\&getcmd);
 		}
             }
         );
@@ -274,6 +289,12 @@ sub finish {
     release_and_then([], \&Amanda::MainLoop::quit);
 }
 
+my $config_overwrites = new_config_overwrites($#ARGV+1);
+Getopt::Long::Configure(qw{bundling});
+GetOptions(
+    'o=s' => sub { add_config_overwrite_opt($config_overwrites, $_[1]); }
+);
+
 Amanda::Util::setup_application("chg-glue", "server", $CONTEXT_DAEMON);
 
 die("$0 is for internal use only") if (@ARGV < 1);
@@ -288,6 +309,7 @@ $SIG{__DIE__} = sub {
 };
 
 config_init($CONFIG_INIT_EXPLICIT_NAME, $config_name);
+apply_config_overwrites($config_overwrites);
 my ($cfgerr_level, @cfgerr_errors) = config_errors();
 if ($cfgerr_level >= $CFGERR_WARNINGS) {
     config_print_errors();

@@ -76,7 +76,7 @@ static void cleanup(void);
 void
 usage(void)
 {
-    g_fprintf(stderr, _("Usage: amfetchdump [options] config hostname [diskname [datestamp [level [hostname [diskname [datestamp [level ... ]]]]]]] [-o configoption]*\n\n"));
+    g_fprintf(stderr, _("Usage: amfetchdump [options] [-o configoption]* config hostname [diskname [datestamp [level [hostname [diskname [datestamp [level ... ]]]]]]]\n\n"));
     g_fprintf(stderr, _("Goes and grabs a dump from tape, moving tapes around and assembling parts as\n"));
     g_fprintf(stderr, _("necessary.  Files are restored to the current directory, unless otherwise\nspecified.\n\n"));
     g_fprintf(stderr, _("  -p Pipe exactly *one* complete dumpfile to stdout, instead of to disk.\n"));
@@ -109,7 +109,10 @@ sort_needed_tapes_by_write_timestamp(
 
     /* if the tape timestamps match, sort them by usage_order, which is derived
      * from the order the tapes were written in a single run */
-    return strcmp(a_ds, b_ds) || (a_nt->usage_order > b_nt->usage_order)? 1 : -1;
+    int r = strcmp(a_ds, b_ds);
+    if (r != 0)
+	return r;
+    return (a_nt->usage_order > b_nt->usage_order)? 1 : -1;
 }
 
 /*
@@ -324,7 +327,7 @@ main(
 
     dbopen(DBG_SUBDIR_SERVER);
 
-    erroutput_type = ERR_INTERACTIVE;
+    add_amanda_log_handler(amanda_log_stderr);
     error_exit_status = 2;
 
     rst_flags = new_rst_flags();

@@ -32,6 +32,7 @@ use Amanda::Config qw( :getconf );
 use Amanda::Debug qw( debug );
 use Amanda::Device qw( :constants );
 use Amanda::Changer;
+use Amanda::MainLoop;
 
 =head1 NAME
 
@@ -39,30 +40,30 @@ Amanda::Changer::compat -- run "old" changer scripts
 
 =head1 DESCRIPTION
 
-This package, calls through to old Changer API shell scripts using the new API.
-If necessary, this writes temporary configurations under C<$AMANDA_TMPDIR> and
+This package calls through to old Changer API shell scripts using the new API.
+If necessary, it writes temporary configurations under C<$AMANDA_TMPDIR> and
 invokes the changer there, allowing multiple distinct changers to run within
 the same Amanda process.
 
-=head1 TODO
+See the amanda-changers(7) manpage for usage information.
+
+=head2 NOTE
 
 In-process reservations are handled correctly - only one device may be used at
 a time.  However, the underlying scripts do not support reservations, so
 another application can easily run the script and change the current device.
 Caveat emptor.
 
-Concurrent _run_tpchanger invocations are currently forbidden with a die() --
-that should change to a simple FIFO queue of tpchanger invocations to make.
-
-Clean out old changer temporary directories on object destruction.
-
-Support 'update'
-
 =cut
+
+# TODO
+# Concurrent _run_tpchanger invocations are currently forbidden with a die() --
+#   that should change to a simple FIFO queue of tpchanger invocations to make.
+# Clean out old changer temporary directories on object destruction.
 
 sub new {
     my $class = shift;
-    my ($cc, $tpchanger) = @_;
+    my ($config, $tpchanger) = @_;
     my ($script) = ($tpchanger =~ /chg-compat:(.*)/);
 
     unless (-e $script) {
@@ -76,14 +77,16 @@ sub new {
 
     my $self = {
         script => $script,
+	config => $config,
 	reserved => 0,
+	got_info => 0,
 	nslots => undef,
 	backwards => undef,
 	searchable => undef,
     };
     bless ($self, $class);
 
-    $self->_make_cfg_dir($cc);
+    $self->_make_cfg_dir($config);
 
     debug("$class initialized with script $script, temporary directory $self->{cfg_dir}");
 
@@ -123,8 +126,7 @@ sub load {
 	    return $self->make_error("fatal", $params{'res_cb'},
 		message => "changer script did not provide a device name");
 	}
-        my $res = Amanda::Changer::compat::Reservation->new($self, $slot, $rest);
-        $params{'res_cb'}->(undef, $res);
+	$self->_make_res($params{'res_cb'}, $slot, $rest, undef);
     };
     my $run_fail_cb = sub {
         my ($exitval, $message) = @_;
@@ -165,15 +167,17 @@ sub _manual_scan {
     $run_success_cb = sub {
         my ($slot, $rest) = @_;
 
-	my $device = Amanda::Device->new($rest);
-	if ($device and $device->configure(1)
-		    and $device->read_label() == $DEVICE_STATUS_SUCCESS
-		    and $device->volume_label() eq $params{'label'}) {
-            # we found the correct slot
-	    my $res = Amanda::Changer::compat::Reservation->new($self, $slot, $rest);
-            $params{'res_cb'}->(undef, $res) if $params{'res_cb'};
-            return;
-        }
+	# if we're looking for a label, check what we got
+	if (defined $params{'label'}) {
+	    my $device = Amanda::Device->new($rest);
+	    if ($device and $device->configure(1)
+			and $device->read_label() == $DEVICE_STATUS_SUCCESS
+			and $device->volume_label() eq $params{'label'}) {
+		# we found the correct slot
+		$self->_make_res($params{'res_cb'}, $slot, $rest, $device);
+		return;
+	    }
+	}
 
         $load_next->();
     };
@@ -193,9 +197,13 @@ sub _manual_scan {
     $load_next = sub {
 	# if we've scanned all nslots, we haven't found the label.
         if (++$nchecked >= $self->{'nslots'}) {
-	    return $self->make_error("failed", $params{'res_cb'},
-		reason => "notfound",
-		message => "Volume '$params{label}' not found");
+	    if (defined $params{'label'}) {
+		return $self->make_error("failed", $params{'res_cb'},
+		    reason => "notfound",
+		    message => "Volume '$params{label}' not found");
+	    } else {
+		return $params{'res_cb'}->(undef, undef);
+	    }
 	}
 
 	debug("Amanda::Changer::compat: manual scanning next slot");
@@ -206,11 +214,38 @@ sub _manual_scan {
     $self->_run_tpchanger($run_success_cb, $run_fail_cb, "-slot", "current");
 }
 
+# takes $res_cb, $slot and $rest; creates and configures the device, and calls
+# $res_cb with the results.
+sub _make_res {
+    my $self = shift;
+    my ($res_cb, $slot, $rest, $device) = @_;
+    my $res;
+
+    if (!defined $device) {
+	$device = Amanda::Device->new($rest);
+	if ($device->status != $DEVICE_STATUS_SUCCESS) {
+	    return $self->make_error("failed", $res_cb,
+		    reason => "device",
+		    message => "opening '$rest': " . $device->error_or_status());
+	}
+    }
+
+    if (my $err = $self->{'config'}->configure_device($device)) {
+	return $self->make_error("failed", $res_cb,
+		reason => "device",
+		message => $err);
+    }
+
+    $res = Amanda::Changer::compat::Reservation->new($self, $slot, $device);
+
+    $res_cb->(undef, $res);
+}
+
 sub info_setup {
     my $self = shift;
     my %params = @_;
 
-    if (!defined($self->{'nslots'}) && grep(/^num_slots$/, @{$params{'info'}})) {
+    if (!$self->{'got_info'}) {
 	$self->_get_info(
 	    sub {
 		$params{'finished_cb'}->();
@@ -238,6 +273,8 @@ sub info_key {
 
     if ($key eq 'num_slots') {
 	$results{$key} = $self->{'nslots'};
+    } elsif ($key eq 'fast_search') {
+	$results{$key} = $self->{'searchable'};
     }
 
     $params{'info_cb'}->(undef, %results) if $params{'info_cb'};
@@ -295,9 +332,21 @@ sub update {
     my $self = shift;
     my %params = @_;
 
-    return $self->make_error("failed", $params{'finished_cb'},
-	reason => "notimpl",
-	message => "chg-compat does not implement 'update'");
+    my $scan_done_cb = make_cb(scan_done_cb => sub {
+	my ($err, $res) = @_;
+	if ($err) {
+	    return $params{'finished_cb'}->($err);
+	}
+
+	# we didn't search for a label, so we don't get a reservation
+	$params{'finished_cb'}->(undef);
+    });
+
+    # for compat changers, "update" just entails scanning the whole changer
+    $self->_manual_scan(
+	res_cb => $scan_done_cb,
+	label => undef, # search forever
+    );
 }
 
 # Internal function to call the script's -info, store the results in $self, and
@@ -319,6 +368,7 @@ sub _get_info {
 	$self->{'backward'} = $2;
 	$self->{'searchable'} = $3? 1:0;
 
+	$self->{'got_info'} = 1;
 	$success_cb->();
     };
     $self->_run_tpchanger($run_success_cb, $error_cb, "-info");
@@ -327,15 +377,18 @@ sub _get_info {
 # Internal function to create a temporary configuration directory, which persists
 # for the duration of this changer's lifetime (and beyond, TODO)
 sub _make_cfg_dir {
-    my ($self, $cc) = @_;
+    my ($self, $config) = @_;
 
-    if (defined $cc) {
+    if ($config->{'is_global'}) {
+	# for the default changer, we don't need to invent a config..
+	$self->{'cfg_dir'} = Amanda::Config::get_config_dir();
+    } else {
 	my $cfg_name = Amanda::Config::get_config_name();
-	my $changer_name = changer_config_name($cc);
-	my $tapedev = changer_config_getconf($cc, $CHANGER_CONFIG_TAPEDEV);
-	my $tpchanger = changer_config_getconf($cc, $CHANGER_CONFIG_TPCHANGER);
-	my $changerdev = changer_config_getconf($cc, $CHANGER_CONFIG_CHANGERDEV);
-	my $changerfile = changer_config_getconf($cc, $CHANGER_CONFIG_CHANGERFILE);
+	my $changer_name = $config->{'name'};
+	my $tapedev = $config->{'tapedev'};
+	my $tpchanger = $config->{'tpchanger'};
+	my $changerdev = $config->{'changerdev'};
+	my $changerfile = $config->{'changerfile'};
 
 	my $cfg_dir = "$AMANDA_TMPDIR/Amanda::Changer::compat/$cfg_name-$changer_name";
 
@@ -374,9 +427,6 @@ sub _make_cfg_dir {
 	close $amconf;
 
 	$self->{'cfg_dir'} = $cfg_dir;
-    } else {
-	# for the default changer, we don't need to invent a config..
-	$self->{'cfg_dir'} = Amanda::Config::get_config_dir();
     }
 
 }
@@ -475,7 +525,7 @@ sub _run_tpchanger {
 	my @child_output = split '\n', $child_output;
 	my $exitval = POSIX::WEXITSTATUS($child_exit_status);
 
-	debug("Got response '$child_output' with exit status $exitval");
+	debug("Amanda::Changer::compat: Got response '$child_output' with exit status $exitval");
 	if (@child_output < 1) {
 	    $failure_cb->(2, "Malformed output from changer script -- no output");
 	    return;
@@ -538,17 +588,17 @@ use Amanda::Debug qw( debug );
 
 sub new {
     my $class = shift;
-    my ($chg, $slot, $device_name) = @_;
+    my ($chg, $slot, $device) = @_;
     my $self = Amanda::Changer::Reservation::new($class);
 
     $self->{'chg'} = $chg;
 
-    $self->{'device_name'} = $device_name;
+    $self->{'device'} = $device;
     $self->{'this_slot'} = $slot;
     $self->{'next_slot'} = "next"; # clever, no?
 
     # mark the changer as reserved
-    $self->{'chg'}->{'reserved'} = $device_name;
+    $self->{'chg'}->{'reserved'} = $device;
 
     return $self;
 }

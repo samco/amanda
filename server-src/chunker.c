@@ -143,8 +143,8 @@ main(
     /* Don't die when child closes pipe */
     signal(SIGPIPE, SIG_IGN);
 
-    erroutput_type = (ERR_AMANDALOG|ERR_INTERACTIVE);
-    set_logerror(logerror);
+    add_amanda_log_handler(amanda_log_stderr);
+    add_amanda_log_handler(amanda_log_trace_log);
 
     cfg_ovr = extract_commandline_config_overwrites(&argc, &argv);
 
@@ -887,6 +887,8 @@ write_tapeheader(
     size_t written;
 
     file->blocksize = DISK_BLOCK_BYTES;
+    if (debug_chunker > 1)
+	dump_dumpfile_t(file);
     buffer = build_header(file, NULL, DISK_BLOCK_BYTES);
     if (!buffer) /* this shouldn't happen */
 	error(_("header does not fit in %zd bytes"), (size_t)DISK_BLOCK_BYTES);

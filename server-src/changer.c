@@ -270,22 +270,26 @@ changer_find(
 		searchable);
     }
 
-    if ((searchlabel!=NULL) && searchable && !done) {
-	rc = changer_search(searchlabel, &curslotstr, &device);
-	done = user_slot(user_data, rc, curslotstr, device);
-    } else {
-	slotstr = "current";
-	checked = 0;
+    if ((searchlabel!=NULL) && searchable && !done){
+      rc=changer_search(searchlabel, &curslotstr, &device);
+      if(rc == 0)
+        done = user_slot(user_data, rc, curslotstr, device);
+    }
+ 
+    slotstr = "current";
+    checked = 0;
 
-	while(!done && checked < nslots) {
-	    rc = changer_loadslot(slotstr, &curslotstr, &device);
+    while(!done && checked < nslots) {
+	rc = changer_loadslot(slotstr, &curslotstr, &device);
+	if(rc > 0)
 	    done = user_slot(user_data, rc, curslotstr, device);
-	    amfree(curslotstr);
-	    amfree(device);
+	else if(!done)
+	    done = user_slot(user_data, 0,  curslotstr, device);
+	amfree(curslotstr);
+	amfree(device);
 
-	    checked += 1;
-	    slotstr = "next";
-	}
+	checked += 1;
+	slotstr = "next";
     }
 }
 
@@ -321,7 +325,9 @@ start_chg_glue(void)
 {
     int stdin_pipe[2] = { -1, -1 };
     int stdout_pipe[2] = { -1, -1 };
-    char *chg_glue;
+    char *chg_glue = NULL;
+    char **config_options = NULL;
+    char *cmdline = NULL;
 
     /* is it already running? */
     if (tpchanger_pid != -1)
@@ -333,6 +339,15 @@ start_chg_glue(void)
 	goto error;
     }
 
+    config_options = get_config_options(2);
+    config_options[0] = g_strdup("chg-glue");
+    config_options[1] = g_strdup(get_config_name());
+    chg_glue = g_strdup_printf("%s/chg-glue", amlibexecdir);
+
+    cmdline = g_strjoinv(" ", config_options);
+    g_debug("invoking %s: %s", chg_glue, cmdline);
+    amfree(cmdline);
+
     switch(tpchanger_pid = fork()) {
     case -1:
 	changer_resultstr = vstrallocf(
@@ -343,23 +358,20 @@ start_chg_glue(void)
 	debug_dup_stderr_to_debug();
 	if(dup2(stdin_pipe[0], 0) == -1) {
 	    changer_resultstr = vstrallocf(
-			_("<error> could not dup2: %s"), strerror(errno));
+			_("<error> could not dup2: %s\n"), strerror(errno));
 	    goto child_err;
 	}
 
 	if(dup2(stdout_pipe[1], 1) == -1) {
 	    changer_resultstr = vstrallocf(
-			_("<error> could not dup2: %s"), strerror(errno));
+			_("<error> could not dup2: %s\n"), strerror(errno));
 	    goto child_err;
 	}
+
 	safe_fd(-1, 0);
-
-	chg_glue = g_strdup_printf("%s/chg-glue", amlibexecdir);
-
-	execl(chg_glue, chg_glue, get_config_name(), NULL);
+	execv(chg_glue, config_options);
 	changer_resultstr = vstrallocf(
-			_("<error> could not exec \"chg-glue\": %s"), strerror(errno));
-	goto child_err;
+			_("<error> could not exec \"%s\": %s\n"), chg_glue, strerror(errno));
 
 child_err:
 	(void)full_write(stdout_pipe[1], changer_resultstr, strlen(changer_resultstr));
@@ -369,6 +381,10 @@ child_err:
 	aclose(stdin_pipe[0]);
 	aclose(stdout_pipe[1]);
 
+	g_strfreev(config_options);
+	amfree(chg_glue);
+	amfree(cmdline);
+
 	tpchanger_stdout = stdout_pipe[0];
 	tpchanger_stdin = stdin_pipe[1];
 
@@ -376,6 +392,8 @@ child_err:
     }
 
 error:
+    amfree(chg_glue);
+    amfree(cmdline);
     aclose(stdin_pipe[0]);
     aclose(stdin_pipe[1]);
     aclose(stdout_pipe[0]);
