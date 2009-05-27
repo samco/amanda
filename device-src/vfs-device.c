@@ -72,6 +72,7 @@ static IoResult vfs_device_robust_read(VfsDevice * self, char *buf,
                                              int *count);
 
 /* Various helper functions. */
+static void release_file(VfsDevice * self);
 static gboolean check_is_dir(Device * d_self, const char * name);
 static char* file_number_to_file_name(VfsDevice * self, guint file);
 static gboolean file_number_to_file_name_functor(const char * filename,
@@ -288,7 +289,7 @@ vfs_device_get_free_space_fn(struct Device *p_self,
 }
 
 /* Drops everything associated with the volume file: Its name and fd. */
-void vfs_release_file(VfsDevice * self) {
+void release_file(VfsDevice * self) {
     /* Doesn't hurt. */
     if (self->open_file_fd != -1)
 	robust_close(self->open_file_fd);
@@ -310,7 +311,7 @@ static void vfs_device_finalize(GObject * obj_self) {
 
     amfree(self->dir_name);
 
-    vfs_release_file(self);
+    release_file(self);
 }
 
 static Device * vfs_device_factory(char * device_name, char * device_type, char * device_node) {
@@ -572,7 +573,7 @@ static gboolean clear_and_prepare_label(VfsDevice * self, char * label,
     dumpfile_t * label_header;
     Device *d_self = DEVICE(self);
 
-    vfs_release_file(self);
+    release_file(self);
 
     /* Delete any extant data, except our volume lock. */
     delete_vfs_files(self);
@@ -654,6 +655,7 @@ static DeviceStatusFlags vfs_device_read_label(Device * dself) {
     if (device_in_error(self)) return dself->status;
 
     amanda_header = dself->volume_header = vfs_device_seek_file(dself, 0);
+    release_file(self);
     if (amanda_header == NULL) {
         /* This means an error occured getting locks or opening the header
          * file. */
@@ -797,7 +799,7 @@ static gboolean	vfs_device_start(Device * pself,
         }
     }
 
-    vfs_release_file(self);
+    release_file(self);
 
     return TRUE;
 }
@@ -981,14 +983,14 @@ vfs_device_start_file (Device * pself, dumpfile_t * ji) {
 	device_set_error(pself,
 		vstrallocf(_("Can't create file %s: %s"), self->file_name, strerror(errno)),
 		DEVICE_STATUS_DEVICE_ERROR);
-        vfs_release_file(self);
+        release_file(self);
         return FALSE;
     }
 
 
     if (!write_amanda_header(self, ji)) {
 	/* write_amanda_header sets error status if necessary */
-        vfs_release_file(self);
+        release_file(self);
         return FALSE;
     }
 
@@ -1008,7 +1010,7 @@ vfs_device_finish_file (Device * pself) {
 
     if (device_in_error(self)) return FALSE;
 
-    vfs_release_file(self);
+    release_file(self);
 
     pself->in_file = FALSE;
     return TRUE;
@@ -1035,7 +1037,7 @@ vfs_device_seek_file (Device * pself, guint requested_file) {
     pself->is_eof = FALSE;
     pself->block = 0;
 
-    vfs_release_file(self);
+    release_file(self);
 
     if (requested_file > 0) {
         file = get_next_file_number(self, requested_file);
@@ -1071,7 +1073,7 @@ vfs_device_seek_file (Device * pself, guint requested_file) {
 	device_set_error(pself,
 	    vstrallocf(_("File %d not found"), file),
 	    DEVICE_STATUS_VOLUME_ERROR);
-        vfs_release_file(self);
+        release_file(self);
         return NULL;
     }
 
@@ -1081,7 +1083,7 @@ vfs_device_seek_file (Device * pself, guint requested_file) {
 	    vstrallocf(_("Couldn't open file %s: %s"), self->file_name, strerror(errno)),
 	    DEVICE_STATUS_DEVICE_ERROR);
         amfree(self->file_name);
-        vfs_release_file(self);
+        release_file(self);
         return NULL;
     }
 
@@ -1091,7 +1093,7 @@ vfs_device_seek_file (Device * pself, guint requested_file) {
 	device_set_error(pself,
 	    vstrallocf(_("Problem reading Amanda header: %s"), device_error(pself)),
 	    DEVICE_STATUS_VOLUME_ERROR);
-        vfs_release_file(self);
+        release_file(self);
         return NULL;
     }
 
@@ -1115,7 +1117,7 @@ vfs_device_seek_file (Device * pself, guint requested_file) {
 		stralloc(_("Invalid amanda header while reading file header")),
 		DEVICE_STATUS_VOLUME_ERROR);
             amfree(rval);
-            vfs_release_file(self);
+            release_file(self);
             return NULL;
     }
 
@@ -1208,12 +1210,12 @@ vfs_device_recycle_file (Device * pself, guint filenum) {
 	device_set_error(pself,
 	    vstrallocf(_("Unlink of %s failed: %s"), self->file_name, strerror(errno)),
 	    DEVICE_STATUS_VOLUME_ERROR);
-        vfs_release_file(self);
+        release_file(self);
         return FALSE;
     }
 
     self->volume_bytes -= file_size;
-    vfs_release_file(self);
+    release_file(self);
     return TRUE;
 }
 
@@ -1228,7 +1230,7 @@ vfs_device_erase (Device * pself) {
 
     delete_vfs_files(self);
 
-    vfs_release_file(self);
+    release_file(self);
 
     return TRUE;
 }

@@ -18,6 +18,9 @@
  * Sunnyvale, CA 94086, USA, or: http://www.zmanda.com
  */
 
+#ifndef __VFS_DEVICE_H__
+#define __VFS_DEVICE_H__
+
 #include "device.h"
 
 /*
@@ -68,4 +71,4 @@ typedef enum {
     RESULT_MAX
 } IoResult;
 
-void vfs_release_file(VfsDevice * self);
+#endif

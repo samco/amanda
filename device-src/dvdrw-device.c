@@ -59,6 +59,7 @@ G_DEFINE_TYPE(DvdRwDevice, dvdrw_device, TYPE_VFS_DEVICE)
 static DevicePropertyBase device_property_dvdrw_mount_point;
 #define PROPERTY_DVDRW_MOUNT_POINT (device_property_dvdrw_mount_point.ID)
 
+/* GObject housekeeping */
 void
 dvdrw_device_register(void);
 
@@ -71,10 +72,12 @@ dvdrw_device_class_init (DvdRwDeviceClass *c);
 static void
 dvdrw_device_init (DvdRwDevice *self);
 
+/* Properties */
 static gboolean
 dvdrw_device_set_mount_point_fn(Device *self,
 	DevicePropertyBase *base, GValue *val, PropertySurety surety, PropertySource source);
 
+/* Methods */
 static void
 dvdrw_device_open_device(Device *dself, char *device_name, char *device_type, char *device_node);
 
@@ -90,6 +93,7 @@ dvdrw_device_finish(Device *dself);
 static void
 dvdrw_device_finalize(GObject *gself);
 
+/* Helper functions */
 static gboolean
 check_access_mode(Device *dself, DeviceAccessMode mode);
 
@@ -185,7 +189,7 @@ dvdrw_device_set_mount_point_fn(Device *dself, DevicePropertyBase *base,
 {
 	DvdRwDevice *self = DVDRW_DEVICE(dself);
 
-	g_free(self->mount_point);
+	amfree(self->mount_point);
 	self->mount_point = g_value_dup_string(val);
 	device_clear_volume_details(dself);
 
@@ -220,7 +224,7 @@ dvdrw_device_open_device(Device *dself, char *device_name, char *device_type, ch
 		parent_class->open_device(dself, device_name, device_type, cache_dir_parent);
 	}
 
-	g_free(cache_dir_parent);
+	amfree(cache_dir_parent);
 }
 
 static DeviceStatusFlags
@@ -244,7 +248,6 @@ dvdrw_device_read_label(Device *dself)
 	old_dir_name = vself->dir_name;
 	vself->dir_name = self->mount_point;
 	status = parent_class->read_label(dself);
-	vfs_release_file(vself);
 	vself->dir_name = old_dir_name;
 
 	if (status == DEVICE_STATUS_SUCCESS)
@@ -305,9 +308,12 @@ dvdrw_device_finish(Device *dself)
 
 	parent_class->finish(dself);
 
-	if (execute_command(dself, burn_argv, &status) != DEVICE_STATUS_SUCCESS)
+	if (dself->access_mode == ACCESS_WRITE)
 	{
-		return FALSE;
+		if (execute_command(dself, burn_argv, &status) != DEVICE_STATUS_SUCCESS)
+		{
+			return FALSE;
+		}
 	}
 
 	return TRUE;
@@ -324,8 +330,8 @@ dvdrw_device_finalize(GObject *gself)
 		parent_class->finalize(gself);
 	}
 
-	g_free(self->dvdrw_device);
-	g_free(self->mount_point);
+	amfree(self->dvdrw_device);
+	amfree(self->mount_point);
 }
 
 static gboolean
