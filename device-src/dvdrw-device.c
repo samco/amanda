@@ -103,7 +103,7 @@ check_readable(Device *dself);
 static DeviceStatusFlags
 mount_disc(Device *dself);
 
-static DeviceStatusFlags
+static void
 unmount_disc(Device *dself);
 
 static DeviceStatusFlags
@@ -230,11 +230,8 @@ dvdrw_device_open_device(Device *dself, char *device_name, char *device_type, ch
 static DeviceStatusFlags
 dvdrw_device_read_label(Device *dself)
 {
-	VfsDevice *vself = VFS_DEVICE(dself);
-	DvdRwDevice *self = DVDRW_DEVICE(dself);
 	DeviceClass *parent_class = DEVICE_CLASS(g_type_class_peek_parent(DVDRW_DEVICE_GET_CLASS(dself)));
 	DeviceStatusFlags status;
-	gchar *old_dir_name;
 
 	if (device_in_error(dself)) return DEVICE_STATUS_DEVICE_ERROR;
 	if (!check_readable(dself)) return DEVICE_STATUS_DEVICE_ERROR;
@@ -245,20 +242,9 @@ dvdrw_device_read_label(Device *dself)
 		return status;
 	}
 
-	old_dir_name = vself->dir_name;
-	vself->dir_name = self->mount_point;
 	status = parent_class->read_label(dself);
-	vself->dir_name = old_dir_name;
 
-	if (status == DEVICE_STATUS_SUCCESS)
-	{
-		status = unmount_disc(dself);
-	}
-	else
-	{
-		/* Ignore further errors */
-		unmount_disc(dself);
-	}
+	unmount_disc(dself);
 
 	return status;
 }
@@ -275,8 +261,14 @@ dvdrw_device_start(Device *dself, DeviceAccessMode mode, char *label, char *time
 
 	if (mode == ACCESS_READ)
 	{
-		if (device_read_label(dself) != DEVICE_STATUS_SUCCESS)
+		if (mount_disc(dself) != DEVICE_STATUS_SUCCESS)
 		{
+			return FALSE;
+		}
+
+		if (!parent_class->start(dself, mode, label, timestamp))
+		{
+			unmount_disc(dself);
 			return FALSE;
 		}
 
@@ -314,6 +306,10 @@ dvdrw_device_finish(Device *dself)
 		{
 			return FALSE;
 		}
+	}
+	else
+	{
+		unmount_disc(dself);
 	}
 
 	return TRUE;
@@ -374,38 +370,46 @@ check_readable(Device *dself)
 static DeviceStatusFlags
 mount_disc(Device *dself)
 {
-	gchar *argv[] = { "mount", DVDRW_DEVICE(dself)->dvdrw_device, NULL };
+	gchar *argv[] = { "mount", DVDRW_DEVICE(dself)->mount_point, NULL };
 	gint status;
 
 	return execute_command(dself, argv, &status);
 }
 
-static DeviceStatusFlags
+static void
 unmount_disc(Device *dself)
 {
-	gchar *argv[] = { "umount", DVDRW_DEVICE(dself)->dvdrw_device, NULL };
-	gint result;
+	gchar *argv[] = { "umount", DVDRW_DEVICE(dself)->mount_point, NULL };
 
-	return execute_command(dself, argv, &result);
+	execute_command(NULL, argv, NULL);
 }
 
 static DeviceStatusFlags
 execute_command(Device *dself, gchar **argv, gint *result)
 {
 	GError *error = NULL;
+	gint errnum;
 
 	g_spawn_sync(NULL, argv, NULL, G_SPAWN_STDOUT_TO_DEV_NULL | G_SPAWN_SEARCH_PATH,
-		NULL, NULL, NULL, NULL, result, &error);
-	if (error || (*result != 0))
+		NULL, NULL, NULL, NULL, &errnum, &error);
+	if (error || (errnum != 0))
 	{
 		gchar *error_message = vstrallocf(_("DVDRW device cannot execute '%s': %s (status %d)"),
-			argv[0], error ? error->message : _("Unknown error"), *result);
+			argv[0], error ? error->message : _("Unknown error"), errnum);
 
-		device_set_error(dself, error_message, DEVICE_STATUS_DEVICE_ERROR);
+		if (dself != NULL)
+		{
+			device_set_error(dself, error_message, DEVICE_STATUS_DEVICE_ERROR);
+		}
 
 		if (error)
 		{
 			g_error_free(error);
+		}
+
+		if (result != NULL)
+		{
+			*result = errnum;
 		}
 
 		return DEVICE_STATUS_DEVICE_ERROR;

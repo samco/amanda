@@ -196,7 +196,7 @@ static void
 vfs_device_class_init (VfsDeviceClass * c)
 {
     GObjectClass *g_object_class = (GObjectClass*) c;
-    DeviceClass *device_class = (DeviceClass *)c;
+    DeviceClass *device_class = DEVICE_CLASS(c);
 
     parent_class = g_type_class_ref(TYPE_DEVICE);
 
@@ -212,6 +212,7 @@ vfs_device_class_init (VfsDeviceClass * c)
     device_class->recycle_file = vfs_device_recycle_file;
     device_class->erase = vfs_device_erase;
     device_class->finish = vfs_device_finish;
+
     g_object_class->finalize = vfs_device_finalize;
 }
 
@@ -480,6 +481,7 @@ vfs_device_open_device (Device * pself, char * device_name, char * device_type, 
 
     /* We don't have to free this ourselves; it will be freed by
      * vfs_device_finalize whether we succeed here or not. */
+	g_debug("Opening VFS device %s", device_node);
     self->dir_name = g_strconcat(device_node, "/data/", NULL);
 
     if (parent_class->open_device) {
@@ -526,7 +528,6 @@ static gboolean check_dir_empty_functor(const char * filename,
     VfsDevice * self;
     char * path_name;
     Device *d_self;
-
     self = VFS_DEVICE(user_data);
     d_self = DEVICE(self);
 
@@ -639,8 +640,8 @@ error:
 static DeviceStatusFlags vfs_device_read_label(Device * dself) {
     dumpfile_t * amanda_header;
     VfsDevice * self;
-
     self = VFS_DEVICE(dself);
+
     g_assert(self != NULL);
 
     if (!check_is_dir(dself, self->dir_name)) {
