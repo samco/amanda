@@ -597,7 +597,7 @@ amgtar_support(
     fprintf(stdout, "CONFIG YES\n");
     fprintf(stdout, "HOST YES\n");
     fprintf(stdout, "DISK YES\n");
-    fprintf(stdout, "MAX-LEVEL 9\n");
+    fprintf(stdout, "MAX-LEVEL 399\n");
     fprintf(stdout, "INDEX-LINE YES\n");
     fprintf(stdout, "INDEX-XML NO\n");
     fprintf(stdout, "MESSAGE-LINE YES\n");
@@ -646,6 +646,13 @@ amgtar_selfcheck(
 	check_dir(gnutar_directory, R_OK);
     } else if (argument->dle.device) {
 	check_dir(argument->dle.device, R_OK);
+    }
+    if (argument->calcsize) {
+	char *calcsize = vstralloc(amlibexecdir, "/", "calcsize",
+				   versionsuffix(), NULL);
+	check_file(calcsize, X_OK);
+	check_suid(calcsize);
+	amfree(calcsize);
     }
     set_root_privs(0);
 }
