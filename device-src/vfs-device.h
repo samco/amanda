@@ -59,6 +59,16 @@ typedef struct {
     DeviceClass __parent__;
 } VfsDeviceClass;
 
+/* Implementation functions */
+dumpfile_t *
+vfs_device_seek_file_dir(VfsDevice * self, const char *dir_name, guint requested_file);
+gboolean vfs_device_get_free_space_dir(VfsDevice * self, const char * dir_name, GValue * val, PropertySurety * surety, PropertySource * source);
+gboolean vfs_device_recycle_file_dir (VfsDevice * self, const char * dir_name, guint filenum);
+DeviceStatusFlags vfs_device_read_label_dir(VfsDevice * self, const char * dir_name);
+gboolean vfs_device_start_dir(VfsDevice * pself, const char * dir_name, DeviceAccessMode mode, char * label, char * timestamp);
+gboolean vfs_device_start_file_dir (VfsDevice *self, const char * dir_name, dumpfile_t * ji);
+gboolean vfs_device_erase_dir(VfsDevice * self, const char *dir_name);
+
 
 /* Possible (abstracted) results from a system I/O operation. */
 typedef enum {
