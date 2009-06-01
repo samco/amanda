@@ -486,7 +486,7 @@ static void update_volume_size(VfsDevice * self, const char *dir_name) {
 
     self->volume_bytes = 0;
     search_vfs_directory(self, dir_name, "^[0-9]+\\.",
-                         update_volume_size_functor, self);
+                         update_volume_size_functor, &data);
 
 }
 
@@ -501,7 +501,6 @@ vfs_device_open_device (Device * pself, char * device_name, char * device_type, 
 
     /* We don't have to free this ourselves; it will be freed by
      * vfs_device_finalize whether we succeed here or not. */
-	g_debug("Opening VFS device %s", device_node);
     self->dir_name = g_strconcat(device_node, "/data/", NULL);
 
     if (parent_class->open_device) {
@@ -692,7 +691,7 @@ DeviceStatusFlags vfs_device_read_label_dir(VfsDevice * self, const char * dir_n
     }
 
     /* close the fd we just opened */
-    vfs_device_finish_file(self);
+    vfs_device_finish_file(dself);
 
     if (amanda_header->type != F_TAPESTART) {
         /* This is an error, and should not happen. */
