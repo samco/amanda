@@ -43,6 +43,7 @@ struct _DvdRwDevice {
 
 	gchar *dvdrw_device;
 	gchar *mount_point;
+	gboolean keep_cache;
 };
 
 /*
@@ -58,6 +59,10 @@ G_DEFINE_TYPE(DvdRwDevice, dvdrw_device, TYPE_VFS_DEVICE)
 /* Where the DVD-RW can be mounted */
 static DevicePropertyBase device_property_dvdrw_mount_point;
 #define PROPERTY_DVDRW_MOUNT_POINT (device_property_dvdrw_mount_point.ID)
+
+/* Should the on-disk version be kept after the optical disc has been written? */
+static DevicePropertyBase device_property_dvdrw_keep_cache;
+#define PROPERTY_DVDRW_KEEP_CACHE (device_property_dvdrw_keep_cache.ID)
 
 /* GObject housekeeping */
 void
@@ -75,6 +80,11 @@ dvdrw_device_init (DvdRwDevice *self);
 /* Properties */
 static gboolean
 dvdrw_device_set_mount_point_fn(Device *self,
+	DevicePropertyBase *base, GValue *val, PropertySurety surety, PropertySource source);
+
+/* Properties */
+static gboolean
+dvdrw_device_set_keep_cache_fn(Device *self,
 	DevicePropertyBase *base, GValue *val, PropertySurety surety, PropertySource source);
 
 /* Methods */
@@ -133,6 +143,10 @@ dvdrw_device_register(void)
 		G_TYPE_STRING, "dvdrw_mount_point",
 		"Directory to mount DVD-RW for reading");
 
+	device_property_fill_and_register(&device_property_dvdrw_keep_cache,
+		G_TYPE_BOOLEAN, "dvdrw_keep_cache",
+		"Keep on-disk cache after DVD-RW has been written");
+
 	register_device(dvdrw_device_factory, device_prefix_list);
 }
 
@@ -170,6 +184,11 @@ dvdrw_device_class_init (DvdRwDeviceClass *c)
 		PROPERTY_ACCESS_GET_MASK | PROPERTY_ACCESS_SET_BEFORE_START,
 		device_simple_property_get_fn,
 		dvdrw_device_set_mount_point_fn);
+
+	device_class_register_property(device_class, PROPERTY_DVDRW_KEEP_CACHE,
+		PROPERTY_ACCESS_GET_MASK | PROPERTY_ACCESS_SET_BEFORE_START,
+		device_simple_property_get_fn,
+		dvdrw_device_set_keep_cache_fn);
 }
 
 static void
@@ -180,6 +199,7 @@ dvdrw_device_init (DvdRwDevice *self)
 
 	self->dvdrw_device = NULL;
 	self->mount_point = NULL;
+	self->keep_cache = FALSE;
 
 	bzero(&val, sizeof(val));
 
@@ -211,6 +231,17 @@ dvdrw_device_set_mount_point_fn(Device *dself, DevicePropertyBase *base,
 	amfree(self->mount_point);
 	self->mount_point = g_value_dup_string(val);
 	device_clear_volume_details(dself);
+
+	return device_simple_property_set_fn(dself, base, val, surety, source);
+}
+
+static gboolean
+dvdrw_device_set_keep_cache_fn(Device *dself, DevicePropertyBase *base,
+	GValue *val, PropertySurety surety, PropertySource source)
+{
+	DvdRwDevice *self = DVDRW_DEVICE(dself);
+
+	self->keep_cache = g_value_get_boolean(val);
 
 	return device_simple_property_set_fn(dself, base, val, surety, source);
 }
@@ -387,6 +418,7 @@ static gboolean
 dvdrw_device_finish(Device *dself)
 {
 	DvdRwDevice *self = DVDRW_DEVICE(dself);
+	VfsDevice *vself = VFS_DEVICE(dself);
 	gboolean result;
 	DeviceClass *parent_class = DEVICE_CLASS(g_type_class_peek_parent(DVDRW_DEVICE_GET_CLASS(dself)));
 	DeviceAccessMode mode;
@@ -408,7 +440,14 @@ dvdrw_device_finish(Device *dself)
 
 	if (mode == ACCESS_WRITE)
 	{
-		return burn_disc(self);
+		result = burn_disc(self);
+
+		if (result && ! self->keep_cache)
+		{
+			delete_vfs_files(vself, vself->dir_name);
+		}
+
+		return result;
 	}
 
 	return TRUE;

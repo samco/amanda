@@ -87,7 +87,6 @@ gboolean vfs_device_get_free_space_fn(struct Device *p_self,
 static gboolean open_lock(VfsDevice * self, int file, gboolean exclusive);
 static void promote_volume_lock(VfsDevice * self);
 static void demote_volume_lock(VfsDevice * self);
-static void delete_vfs_files(VfsDevice * self, const char * dir_name);
 static gboolean delete_vfs_files_functor(const char * filename,
                                          gpointer self);
 static gboolean check_dir_empty_functor(const char * filename,
@@ -532,7 +531,7 @@ static gboolean delete_vfs_files_functor(const char * filename,
 
 /* delete_vfs_files deletes all VfsDevice files in the directory except the
    volume lockfile. */
-static void delete_vfs_files(VfsDevice * self, const char * dir_name) {
+void delete_vfs_files(VfsDevice * self, const char * dir_name) {
     g_assert(self != NULL);
 
     /* This function assumes that the volume is locked! */

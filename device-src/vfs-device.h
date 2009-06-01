@@ -68,6 +68,8 @@ gboolean vfs_device_start_file_dir (VfsDevice *self, const char * dir_name, dump
 gboolean vfs_device_recycle_file_dir (VfsDevice * self, const char * dir_name, guint filenum);
 gboolean vfs_device_erase_dir(VfsDevice * self, const char *dir_name);
 
+void delete_vfs_files(VfsDevice * self, const char * dir_name);
+
 
 /* Possible (abstracted) results from a system I/O operation. */
 typedef enum {
