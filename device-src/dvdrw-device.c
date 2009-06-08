@@ -42,6 +42,7 @@ struct _DvdRwDevice {
 	VfsDevice __parent__;
 
 	gchar *dvdrw_device;
+	gchar *cache_dir;
 	gchar *mount_point;
 	gboolean keep_cache;
 };
@@ -269,11 +270,11 @@ dvdrw_device_open_device(Device *dself, char *device_name, char *device_type, ch
 	}
 
 	self->dvdrw_device = g_strdup(colon + 1);
-	cache_dir_parent = g_strndup(device_node, colon - device_node);
+	self->cache_dir = g_strndup(device_node, colon - device_node);
 
 	if (parent_class->open_device)
 	{
-		parent_class->open_device(dself, device_name, device_type, cache_dir_parent);
+		parent_class->open_device(dself, device_name, device_type, self->cache_dir);
 	}
 
 	amfree(cache_dir_parent);
@@ -457,13 +458,12 @@ static gboolean
 burn_disc(DvdRwDevice *self)
 {
 	Device *dself = DEVICE(self);
-	VfsDevice *vself = VFS_DEVICE(dself);
 
 	gint status;
 	char *burn_argv[] = {GROWISOFS, "-use-the-force-luke",
 		"-Z", self->dvdrw_device,
 		"-J", "-R", "-pad", "-quiet",
-		vself->dir_name, NULL};
+		self->cache_dir, NULL};
 
 	if (execute_command(dself, burn_argv, &status) != DEVICE_STATUS_SUCCESS)
 	{
@@ -485,6 +485,7 @@ dvdrw_device_finalize(GObject *gself)
 	}
 
 	amfree(self->dvdrw_device);
+	amfree(self->cache_dir);
 	amfree(self->mount_point);
 }
 
