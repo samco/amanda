@@ -45,6 +45,9 @@ struct _DvdRwDevice {
 	gchar *cache_dir;
 	gchar *mount_point;
 	gboolean keep_cache;
+	gchar *growisofs_command;
+	gchar *mount_command;
+	gchar *umount_command;
 };
 
 /*
@@ -65,6 +68,18 @@ static DevicePropertyBase device_property_dvdrw_mount_point;
 static DevicePropertyBase device_property_dvdrw_keep_cache;
 #define PROPERTY_DVDRW_KEEP_CACHE (device_property_dvdrw_keep_cache.ID)
 
+/* Where to find the growisofs command */
+static DevicePropertyBase device_property_dvdrw_growisofs_command;
+#define PROPERTY_DVDRW_GROWISOFS_COMMAND (device_property_dvdrw_growisofs_command.ID)
+
+/* Where to find the filesystem mount command */
+static DevicePropertyBase device_property_dvdrw_mount_command;
+#define PROPERTY_DVDRW_MOUNT_COMMAND (device_property_dvdrw_mount_command.ID)
+
+/* Where to find the filesystem unmount command */
+static DevicePropertyBase device_property_dvdrw_umount_command;
+#define PROPERTY_DVDRW_UMOUNT_COMMAND (device_property_dvdrw_umount_command.ID)
+
 /* GObject housekeeping */
 void
 dvdrw_device_register(void);
@@ -83,9 +98,20 @@ static gboolean
 dvdrw_device_set_mount_point_fn(Device *self,
 	DevicePropertyBase *base, GValue *val, PropertySurety surety, PropertySource source);
 
-/* Properties */
 static gboolean
 dvdrw_device_set_keep_cache_fn(Device *self,
+	DevicePropertyBase *base, GValue *val, PropertySurety surety, PropertySource source);
+
+static gboolean
+dvdrw_device_set_growisofs_command_fn(Device *self,
+	DevicePropertyBase *base, GValue *val, PropertySurety surety, PropertySource source);
+
+static gboolean
+dvdrw_device_set_mount_command_fn(Device *self,
+	DevicePropertyBase *base, GValue *val, PropertySurety surety, PropertySource source);
+
+static gboolean
+dvdrw_device_set_umount_command_fn(Device *self,
 	DevicePropertyBase *base, GValue *val, PropertySurety surety, PropertySource source);
 
 /* Methods */
@@ -118,22 +144,22 @@ dvdrw_device_finalize(GObject *gself);
 
 /* Helper functions */
 static gboolean
-check_access_mode(Device *dself, DeviceAccessMode mode);
+check_access_mode(DvdRwDevice *self, DeviceAccessMode mode);
 
 static gboolean
-check_readable(Device *dself);
+check_readable(DvdRwDevice *self);
 
 static DeviceStatusFlags
-mount_disc(Device *dself);
+mount_disc(DvdRwDevice *self);
 
 static void
-unmount_disc(Device *dself);
+unmount_disc(DvdRwDevice *self);
 
 static gboolean
 burn_disc(DvdRwDevice *self);
 
 static DeviceStatusFlags
-execute_command(Device *dself, gchar **argv, gint *status);
+execute_command(DvdRwDevice *self, gchar **argv, gint *status);
 
 void
 dvdrw_device_register(void)
@@ -147,6 +173,18 @@ dvdrw_device_register(void)
 	device_property_fill_and_register(&device_property_dvdrw_keep_cache,
 		G_TYPE_BOOLEAN, "dvdrw_keep_cache",
 		"Keep on-disk cache after DVD-RW has been written");
+
+	device_property_fill_and_register(&device_property_dvdrw_growisofs_command,
+		G_TYPE_BOOLEAN, "dvdrw_growisofs_command",
+		"The location of the growisofs command used to write the DVD-RW");
+
+	device_property_fill_and_register(&device_property_dvdrw_mount_command,
+		G_TYPE_BOOLEAN, "dvdrw_mount_command",
+		"The location of the mount command used to mount the DVD-RW filesystem for reading");
+
+	device_property_fill_and_register(&device_property_dvdrw_umount_command,
+		G_TYPE_BOOLEAN, "dvdrw_umount_command",
+		"The location of the umount command used to unmount the DVD-RW filesystem after reading");
 
 	register_device(dvdrw_device_factory, device_prefix_list);
 }
@@ -190,6 +228,21 @@ dvdrw_device_class_init (DvdRwDeviceClass *c)
 		PROPERTY_ACCESS_GET_MASK | PROPERTY_ACCESS_SET_BEFORE_START,
 		device_simple_property_get_fn,
 		dvdrw_device_set_keep_cache_fn);
+
+	device_class_register_property(device_class, PROPERTY_DVDRW_GROWISOFS_COMMAND,
+		PROPERTY_ACCESS_GET_MASK | PROPERTY_ACCESS_SET_BEFORE_START,
+		device_simple_property_get_fn,
+		dvdrw_device_set_growisofs_command_fn);
+
+	device_class_register_property(device_class, PROPERTY_DVDRW_MOUNT_COMMAND,
+		PROPERTY_ACCESS_GET_MASK | PROPERTY_ACCESS_SET_BEFORE_START,
+		device_simple_property_get_fn,
+		dvdrw_device_set_mount_command_fn);
+
+	device_class_register_property(device_class, PROPERTY_DVDRW_UMOUNT_COMMAND,
+		PROPERTY_ACCESS_GET_MASK | PROPERTY_ACCESS_SET_BEFORE_START,
+		device_simple_property_get_fn,
+		dvdrw_device_set_umount_command_fn);
 }
 
 static void
@@ -199,8 +252,12 @@ dvdrw_device_init (DvdRwDevice *self)
 	GValue val;
 
 	self->dvdrw_device = NULL;
+	self->cache_dir = NULL;
 	self->mount_point = NULL;
 	self->keep_cache = FALSE;
+	self->growisofs_command = NULL;
+	self->mount_command = NULL;
+	self->umount_command = NULL;
 
 	bzero(&val, sizeof(val));
 
@@ -247,6 +304,39 @@ dvdrw_device_set_keep_cache_fn(Device *dself, DevicePropertyBase *base,
 	return device_simple_property_set_fn(dself, base, val, surety, source);
 }
 
+static gboolean
+dvdrw_device_set_growisofs_command_fn(Device *dself, DevicePropertyBase *base,
+	GValue *val, PropertySurety surety, PropertySource source)
+{
+	DvdRwDevice *self = DVDRW_DEVICE(dself);
+
+	self->growisofs_command = g_value_dup_string(val);
+
+	return device_simple_property_set_fn(dself, base, val, surety, source);
+}
+
+static gboolean
+dvdrw_device_set_mount_command_fn(Device *dself, DevicePropertyBase *base,
+	GValue *val, PropertySurety surety, PropertySource source)
+{
+	DvdRwDevice *self = DVDRW_DEVICE(dself);
+
+	self->mount_command = g_value_dup_string(val);
+
+	return device_simple_property_set_fn(dself, base, val, surety, source);
+}
+
+static gboolean
+dvdrw_device_set_umount_command_fn(Device *dself, DevicePropertyBase *base,
+	GValue *val, PropertySurety surety, PropertySource source)
+{
+	DvdRwDevice *self = DVDRW_DEVICE(dself);
+
+	self->umount_command = g_value_dup_string(val);
+
+	return device_simple_property_set_fn(dself, base, val, surety, source);
+}
+
 static void
 dvdrw_device_open_device(Device *dself, char *device_name, char *device_type, char *device_node)
 {
@@ -254,7 +344,6 @@ dvdrw_device_open_device(Device *dself, char *device_name, char *device_type, ch
 	DeviceClass *parent_class = DEVICE_CLASS(g_type_class_peek_parent(DVDRW_DEVICE_GET_CLASS(dself)));
 	GValue val;
 	char *colon;
-	char *cache_dir_parent;
 
 	g_debug("Opening device %s", device_node);
 
@@ -276,8 +365,6 @@ dvdrw_device_open_device(Device *dself, char *device_name, char *device_type, ch
 	{
 		parent_class->open_device(dself, device_name, device_type, self->cache_dir);
 	}
-
-	amfree(cache_dir_parent);
 }
 
 static DeviceStatusFlags
@@ -286,21 +373,26 @@ dvdrw_device_read_label(Device *dself)
 	DvdRwDevice *self = DVDRW_DEVICE(dself);
 	VfsDevice *vself = VFS_DEVICE(dself);
 	DeviceStatusFlags status;
+	char *data_dir;
 
 	if (device_in_error(dself)) return DEVICE_STATUS_DEVICE_ERROR;
-	if (!check_readable(dself)) return DEVICE_STATUS_DEVICE_ERROR;
+	if (!check_readable(self)) return DEVICE_STATUS_DEVICE_ERROR;
 
 	g_debug("Mounting disc in read_label at %s", self->mount_point);
-	status = mount_disc(dself);
+	status = mount_disc(self);
 	if (status != DEVICE_STATUS_SUCCESS)
 	{
 		return status;
 	}
 
-	status = vfs_device_read_label_dir(vself, self->mount_point);
+	data_dir = g_strconcat(self->mount_point, "/data/", NULL);
+
+	status = vfs_device_read_label_dir(vself, data_dir);
+
+	amfree(data_dir);
 
 	g_debug("Unmounting disc in read_label");
-	unmount_disc(dself);
+	unmount_disc(self);
 
 	return status;
 }
@@ -313,7 +405,7 @@ dvdrw_device_start(Device *dself, DeviceAccessMode mode, char *label, char *time
 	DeviceClass *parent_class = DEVICE_CLASS(g_type_class_peek_parent(DVDRW_DEVICE_GET_CLASS(dself)));
 
 	if (device_in_error(dself)) return FALSE;
-	if (!check_access_mode(dself, mode)) return FALSE;
+	if (!check_access_mode(self, mode)) return FALSE;
 
 	g_debug("Starting device in mode %s", mode == ACCESS_WRITE ? "write" : "read");
 
@@ -322,7 +414,7 @@ dvdrw_device_start(Device *dself, DeviceAccessMode mode, char *label, char *time
 	if (mode == ACCESS_READ)
 	{
 		g_debug("Mounting disc in start at %s", self->mount_point);
-		if (mount_disc(dself) != DEVICE_STATUS_SUCCESS)
+		if (mount_disc(self) != DEVICE_STATUS_SUCCESS)
 		{
 			return FALSE;
 		}
@@ -432,7 +524,7 @@ dvdrw_device_finish(Device *dself)
 	result = parent_class->finish(dself);
 
 	g_debug("Unmounting disc in finish in mode %s", mode == ACCESS_WRITE ? "write" : "read");
-	unmount_disc(dself);
+	unmount_disc(self);
 
 	if (! result)
 	{
@@ -457,15 +549,23 @@ dvdrw_device_finish(Device *dself)
 static gboolean
 burn_disc(DvdRwDevice *self)
 {
-	Device *dself = DEVICE(self);
-
 	gint status;
-	char *burn_argv[] = {GROWISOFS, "-use-the-force-luke",
+
+	char *burn_argv[] = {NULL, "-use-the-force-luke",
 		"-Z", self->dvdrw_device,
 		"-J", "-R", "-pad", "-quiet",
 		self->cache_dir, NULL};
 
-	if (execute_command(dself, burn_argv, &status) != DEVICE_STATUS_SUCCESS)
+	if (self->growisofs_command == NULL)
+	{
+		burn_argv[0] = "growisofs";
+	}
+	else
+	{
+		burn_argv[0] = self->growisofs_command;
+	}
+
+	if (execute_command(self, burn_argv, &status) != DEVICE_STATUS_SUCCESS)
 	{
 		return FALSE;
 	}
@@ -487,14 +587,19 @@ dvdrw_device_finalize(GObject *gself)
 	amfree(self->dvdrw_device);
 	amfree(self->cache_dir);
 	amfree(self->mount_point);
+	amfree(self->growisofs_command);
+	amfree(self->mount_command);
+	amfree(self->umount_command);
 }
 
 static gboolean
-check_access_mode(Device *dself, DeviceAccessMode mode)
+check_access_mode(DvdRwDevice *self, DeviceAccessMode mode)
 {
+	Device *dself = DEVICE(self);
+
 	if (mode == ACCESS_READ)
 	{
-		return check_readable(dself);
+		return check_readable(self);
 	}
 	else if (mode == ACCESS_WRITE)
 	{
@@ -509,8 +614,9 @@ check_access_mode(Device *dself, DeviceAccessMode mode)
 }
 
 static gboolean
-check_readable(Device *dself)
+check_readable(DvdRwDevice *self)
 {
+	Device *dself = DEVICE(self);
 	GValue value;
 	bzero(&value, sizeof(value));
 
@@ -527,25 +633,44 @@ check_readable(Device *dself)
 }
 
 static DeviceStatusFlags
-mount_disc(Device *dself)
+mount_disc(DvdRwDevice *self)
 {
-	gchar *argv[] = { "mount", DVDRW_DEVICE(dself)->mount_point, NULL };
+	gchar *mount_argv[] = { NULL, self->mount_point, NULL };
 	gint status;
 
-	return execute_command(dself, argv, &status);
+	if (self->mount_command == NULL)
+	{
+		mount_argv[0] = "mount";
+	}
+	else
+	{
+		mount_argv[0] = self->mount_command;
+	}
+
+	return execute_command(self, mount_argv, &status);
 }
 
 static void
-unmount_disc(Device *dself)
+unmount_disc(DvdRwDevice *self)
 {
-	gchar *argv[] = { "umount", DVDRW_DEVICE(dself)->mount_point, NULL };
+	gchar *unmount_argv[] = { NULL, self->mount_point, NULL };
 
-	execute_command(NULL, argv, NULL);
+	if (self->umount_command == NULL)
+	{
+		unmount_argv[0] = "umount";
+	}
+	else
+	{
+		unmount_argv[0] = self->umount_command;
+	}
+
+	execute_command(NULL, unmount_argv, NULL);
 }
 
 static DeviceStatusFlags
-execute_command(Device *dself, gchar **argv, gint *result)
+execute_command(DvdRwDevice *self, gchar **argv, gint *result)
 {
+	Device *dself = DEVICE(self);
 	GError *error = NULL;
 	gint errnum;
 
