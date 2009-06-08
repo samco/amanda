@@ -43,6 +43,17 @@
 /* This looks dangerous, but is actually modified by the umask. */
 #define VFS_DEVICE_CREAT_MODE 0666
 
+/* Possible (abstracted) results from a system I/O operation. */
+typedef enum {
+    RESULT_SUCCESS,
+    RESULT_ERROR,        /* Undefined error. */
+    RESULT_NO_DATA,      /* End of File, while reading */
+    RESULT_NO_SPACE,     /* Out of space. Sometimes we don't know if
+                            it was this or I/O error, but this is the
+                            preferred explanation. */
+    RESULT_MAX
+} IoResult;
+
 void vfs_device_register(void);
 
 /* here are local prototypes */

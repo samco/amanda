@@ -70,16 +70,4 @@ gboolean vfs_device_erase_dir(VfsDevice * self, const char *dir_name);
 
 void delete_vfs_files(VfsDevice * self, const char * dir_name);
 
-
-/* Possible (abstracted) results from a system I/O operation. */
-typedef enum {
-    RESULT_SUCCESS,
-    RESULT_ERROR,        /* Undefined error. */
-    RESULT_NO_DATA,      /* End of File, while reading */
-    RESULT_NO_SPACE,     /* Out of space. Sometimes we don't know if
-                            it was this or I/O error, but this is the
-                            preferred explanation. */
-    RESULT_MAX
-} IoResult;
-
 #endif
