@@ -145,8 +145,6 @@ AMANDA_PROG_PCAT
 AMANDA_PROG_PERL
 AMANDA_PROG_SWIG
 AMANDA_PS_ARGUMENT
-AMANDA_PROG_GROWISOFS
-AMANDA_PROG_DVDRW_MEDIAINFO
 
 dnl -------------------------------------------------------------------------
 

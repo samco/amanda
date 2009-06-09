@@ -131,9 +131,6 @@ static dumpfile_t *
 dvdrw_device_seek_file(Device * dself, guint requested_file);
 
 static gboolean
-dvdrw_device_recycle_file(Device * dself, guint filenum);
-
-static gboolean
 dvdrw_device_erase(Device * dself);
 
 static gboolean
@@ -213,7 +210,6 @@ dvdrw_device_class_init (DvdRwDeviceClass *c)
 	device_class->start = dvdrw_device_start;
 	device_class->start_file = dvdrw_device_start_file;
 	device_class->seek_file = dvdrw_device_seek_file;
-	device_class->recycle_file = dvdrw_device_recycle_file;
 	device_class->erase = dvdrw_device_erase;
 	device_class->finish = dvdrw_device_finish;
 
@@ -470,39 +466,26 @@ dvdrw_device_seek_file(Device * dself, guint requested_file)
 }
 
 static gboolean
-dvdrw_device_recycle_file(Device * dself, guint filenum)
-{
-	VfsDevice *vself = VFS_DEVICE(dself);
-	DvdRwDevice *self = DVDRW_DEVICE(dself);
-	DeviceClass *parent_class = DEVICE_CLASS(g_type_class_peek_parent(DVDRW_DEVICE_GET_CLASS(dself)));
-
-	if (dself->access_mode == ACCESS_READ)
-	{
-		return vfs_device_recycle_file_dir(vself, self->mount_point, filenum);
-	}
-	else
-	{
-		return parent_class->recycle_file(dself, filenum);
-	}
-
-	return FALSE;
-}
-
-static gboolean
 dvdrw_device_erase(Device * dself)
 {
+/*
 	VfsDevice *vself = VFS_DEVICE(dself);
 	DvdRwDevice *self = DVDRW_DEVICE(dself);
+ */
 	DeviceClass *parent_class = DEVICE_CLASS(g_type_class_peek_parent(DVDRW_DEVICE_GET_CLASS(dself)));
 
+/* Not valid for DVD-RW?
 	if (dself->access_mode == ACCESS_READ)
 	{
 		return vfs_device_erase_dir(vself, self->mount_point);
 	}
 	else
 	{
+ */
 		return parent_class->erase(dself);
+/*
 	}
+ */
 
 	return FALSE;
 }
