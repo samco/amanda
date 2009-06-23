@@ -44,6 +44,7 @@ struct _DvdRwDevice {
 	gchar *dvdrw_device;
 	gchar *cache_dir;
 	gchar *mount_point;
+	gchar *data_dir;
 	gboolean keep_cache;
 	gchar *growisofs_command;
 	gchar *mount_command;
@@ -250,6 +251,7 @@ dvdrw_device_init (DvdRwDevice *self)
 	self->dvdrw_device = NULL;
 	self->cache_dir = NULL;
 	self->mount_point = NULL;
+	self->data_dir = NULL;
 	self->keep_cache = FALSE;
 	self->growisofs_command = NULL;
 	self->mount_command = NULL;
@@ -283,7 +285,11 @@ dvdrw_device_set_mount_point_fn(Device *dself, DevicePropertyBase *base,
 	DvdRwDevice *self = DVDRW_DEVICE(dself);
 
 	amfree(self->mount_point);
+	amfree(self->data_dir);
+
 	self->mount_point = g_value_dup_string(val);
+	self->data_dir = g_strconcat(self->mount_point, "/data/", NULL);
+
 	device_clear_volume_details(dself);
 
 	return device_simple_property_set_fn(dself, base, val, surety, source);
@@ -369,25 +375,18 @@ dvdrw_device_read_label(Device *dself)
 	DvdRwDevice *self = DVDRW_DEVICE(dself);
 	VfsDevice *vself = VFS_DEVICE(dself);
 	DeviceStatusFlags status;
-	char *data_dir;
 
 	if (device_in_error(dself)) return DEVICE_STATUS_DEVICE_ERROR;
 	if (!check_readable(self)) return DEVICE_STATUS_DEVICE_ERROR;
 
-	g_debug("Mounting disc in read_label at %s", self->mount_point);
 	status = mount_disc(self);
 	if (status != DEVICE_STATUS_SUCCESS)
 	{
 		return status;
 	}
 
-	data_dir = g_strconcat(self->mount_point, "/data/", NULL);
+	status = vfs_device_read_label_dir(vself, self->data_dir);
 
-	status = vfs_device_read_label_dir(vself, data_dir);
-
-	amfree(data_dir);
-
-	g_debug("Unmounting disc in read_label");
 	unmount_disc(self);
 
 	return status;
@@ -403,19 +402,16 @@ dvdrw_device_start(Device *dself, DeviceAccessMode mode, char *label, char *time
 	if (device_in_error(dself)) return FALSE;
 	if (!check_access_mode(self, mode)) return FALSE;
 
-	g_debug("Starting device in mode %s", mode == ACCESS_WRITE ? "write" : "read");
-
 	dself->access_mode = mode;
 
 	if (mode == ACCESS_READ)
 	{
-		g_debug("Mounting disc in start at %s", self->mount_point);
 		if (mount_disc(self) != DEVICE_STATUS_SUCCESS)
 		{
 			return FALSE;
 		}
 
-		return vfs_device_start_dir(vself, self->mount_point, mode, label, timestamp);
+		return vfs_device_start_dir(vself, self->data_dir, mode, label, timestamp);
 	}
 	else if (mode == ACCESS_WRITE)
 	{
@@ -436,7 +432,7 @@ dvdrw_device_start_file(Device *dself, dumpfile_t * ji)
 
 	if (dself->access_mode == ACCESS_READ)
 	{
-		return vfs_device_start_file_dir(vself, self->mount_point, ji);
+		return vfs_device_start_file_dir(vself, self->data_dir, ji);
 	}
 	else
 	{
@@ -455,7 +451,7 @@ dvdrw_device_seek_file(Device * dself, guint requested_file)
 
 	if (dself->access_mode == ACCESS_READ)
 	{
-		return vfs_device_seek_file_dir(vself, self->mount_point, requested_file);
+		return vfs_device_seek_file_dir(vself, self->data_dir, requested_file);
 	}
 	else
 	{
@@ -477,7 +473,7 @@ dvdrw_device_erase(Device * dself)
 /* Not valid for DVD-RW?
 	if (dself->access_mode == ACCESS_READ)
 	{
-		return vfs_device_erase_dir(vself, self->mount_point);
+		return vfs_device_erase_dir(vself, self->data_dir);
 	}
 	else
 	{
@@ -499,14 +495,18 @@ dvdrw_device_finish(Device *dself)
 	DeviceClass *parent_class = DEVICE_CLASS(g_type_class_peek_parent(DVDRW_DEVICE_GET_CLASS(dself)));
 	DeviceAccessMode mode;
 
-	if (device_in_error(dself)) return FALSE;
+	if (device_in_error(dself))
+	{
+		/* Still need to do this, don't care if it works or not */
+		unmount_disc(self);
+		return FALSE;
+	}
 
 	/* Save access mode before parent class messes with it */
 	mode = dself->access_mode;
 
 	result = parent_class->finish(dself);
 
-	g_debug("Unmounting disc in finish in mode %s", mode == ACCESS_WRITE ? "write" : "read");
 	unmount_disc(self);
 
 	if (! result)
@@ -520,7 +520,7 @@ dvdrw_device_finish(Device *dself)
 
 		if (result && ! self->keep_cache)
 		{
-			delete_vfs_files(vself, vself->dir_name);
+			delete_vfs_files(vself, self->cache_dir);
 		}
 
 		return result;
@@ -570,6 +570,7 @@ dvdrw_device_finalize(GObject *gself)
 	amfree(self->dvdrw_device);
 	amfree(self->cache_dir);
 	amfree(self->mount_point);
+	amfree(self->data_dir);
 	amfree(self->growisofs_command);
 	amfree(self->mount_command);
 	amfree(self->umount_command);

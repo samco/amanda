@@ -851,6 +851,8 @@ vfs_device_finish (Device * pself) {
     VfsDevice * self;
     self = VFS_DEVICE(pself);
 
+    release_file(self);
+
     if (device_in_error(self)) return FALSE;
 
     pself->access_mode = ACCESS_NULL;
@@ -888,6 +890,7 @@ get_last_file_number(VfsDevice * self, const char *dir_name) {
     data.self = self;
     data.rval = -1;
 
+	g_debug("Looking for last file number in directory %s", dir_name);
     count = search_vfs_directory(self, dir_name, "^[0-9]+\\.",
                                  get_last_file_number_functor, &data);
 
