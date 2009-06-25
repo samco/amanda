@@ -375,6 +375,9 @@ dvdrw_device_read_label(Device *dself)
 	DvdRwDevice *self = DVDRW_DEVICE(dself);
 	VfsDevice *vself = VFS_DEVICE(dself);
 	DeviceStatusFlags status;
+	struct stat dir_status;
+
+	g_debug("Reading label from media at %s", self->mount_point);
 
 	if (device_in_error(dself)) return DEVICE_STATUS_DEVICE_ERROR;
 	if (!check_readable(self)) return DEVICE_STATUS_DEVICE_ERROR;
@@ -383,6 +386,15 @@ dvdrw_device_read_label(Device *dself)
 	if (status != DEVICE_STATUS_SUCCESS)
 	{
 		return status;
+	}
+
+	if ((stat(self->data_dir, &dir_status) < 0) && (errno == ENOENT))
+	{
+		/* No data directory, consider the DVD unlabelled */
+		g_debug("Media contains no data directory and therefore no label");
+		unmount_disc(self);
+
+		return DEVICE_STATUS_VOLUME_UNLABELED;
 	}
 
 	status = vfs_device_read_label_dir(vself, self->data_dir);
@@ -398,6 +410,8 @@ dvdrw_device_start(Device *dself, DeviceAccessMode mode, char *label, char *time
 	DvdRwDevice *self = DVDRW_DEVICE(dself);
 	VfsDevice *vself = VFS_DEVICE(dself);
 	DeviceClass *parent_class = DEVICE_CLASS(g_type_class_peek_parent(DVDRW_DEVICE_GET_CLASS(dself)));
+
+	g_debug("Start DVDRW device");
 
 	if (device_in_error(dself)) return FALSE;
 	if (!check_access_mode(self, mode)) return FALSE;
@@ -495,10 +509,16 @@ dvdrw_device_finish(Device *dself)
 	DeviceClass *parent_class = DEVICE_CLASS(g_type_class_peek_parent(DVDRW_DEVICE_GET_CLASS(dself)));
 	DeviceAccessMode mode;
 
+	g_debug("Finish device");
+
 	if (device_in_error(dself))
 	{
-		/* Still need to do this, don't care if it works or not */
-		unmount_disc(self);
+		if (mode == ACCESS_READ)
+		{
+			/* Still need to do this, don't care if it works or not */
+			unmount_disc(self);
+		}
+
 		return FALSE;
 	}
 
@@ -507,7 +527,10 @@ dvdrw_device_finish(Device *dself)
 
 	result = parent_class->finish(dself);
 
-	unmount_disc(self);
+	if (mode == ACCESS_READ)
+	{
+		unmount_disc(self);
+	}
 
 	if (! result)
 	{
@@ -548,6 +571,7 @@ burn_disc(DvdRwDevice *self)
 		burn_argv[0] = self->growisofs_command;
 	}
 
+	g_debug("Burning media in %s", self->dvdrw_device);
 	if (execute_command(self, burn_argv, &status) != DEVICE_STATUS_SUCCESS)
 	{
 		return FALSE;
@@ -631,6 +655,7 @@ mount_disc(DvdRwDevice *self)
 		mount_argv[0] = self->mount_command;
 	}
 
+	g_debug("Mounting media at %s", self->mount_point);
 	return execute_command(self, mount_argv, &status);
 }
 
@@ -648,6 +673,7 @@ unmount_disc(DvdRwDevice *self)
 		unmount_argv[0] = self->umount_command;
 	}
 
+	g_debug("Unmounting DVD at %s", self->mount_point);
 	execute_command(NULL, unmount_argv, NULL);
 }
 

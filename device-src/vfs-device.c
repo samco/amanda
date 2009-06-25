@@ -890,7 +890,6 @@ get_last_file_number(VfsDevice * self, const char *dir_name) {
     data.self = self;
     data.rval = -1;
 
-	g_debug("Looking for last file number in directory %s", dir_name);
     count = search_vfs_directory(self, dir_name, "^[0-9]+\\.",
                                  get_last_file_number_functor, &data);
 
