@@ -541,7 +541,7 @@ dvdrw_device_finish(Device *dself)
 	{
 		result = burn_disc(self);
 
-		if (result && ! self->keep_cache)
+		if (result && !self->keep_cache)
 		{
 			delete_vfs_files(vself, self->cache_dir);
 		}
@@ -576,6 +576,7 @@ burn_disc(DvdRwDevice *self)
 	{
 		return FALSE;
 	}
+	g_debug("Burn completed successfully");
 
 	return TRUE;
 }
