@@ -1980,6 +1980,14 @@ level 1 incrementals in this configuration; this is probably a bug.</para>
   </listitem>
   </varlistentry>
   <varlistentry>
+  <term><emphasis remap='B'>ssh_keys</emphasis> <emphasis remap='I'> string</emphasis></term>
+  <listitem>
+<para>Default:
+<emphasis remap='I'>No default</emphasis>.
+The key file the ssh auth will use, it must be the private key. If this parameter is not specified, then the default ssh key will be used.</para>
+  </listitem>
+  </varlistentry>
+  <varlistentry>
   <term><emphasis remap='B'>starttime</emphasis> <emphasis remap='I'> int</emphasis></term>
   <listitem>
 <para>Default:
@@ -2416,6 +2424,12 @@ A comment string describing this script.</para>
   <term><emphasis remap='B'>plugin</emphasis> <emphasis remap='I'>string</emphasis></term>
   <listitem>
 <para>No default. Must be set to the name of the program. This program must be in the <emphasis remap='I'>$libexecdir/amanda/application</emphasis> directory on the client and/or server.</para>
+  </listitem>
+  </varlistentry>
+  <varlistentry>
+  <term><emphasis remap='B'>order</emphasis> int</term>
+  <listitem>
+<para>Default: <emphasis remap='I'>5000</emphasis>. Scripts are executed in that order, it is useful if you have many scripts and they must be executed in a spefific order.</para>
   </listitem>
   </varlistentry>
   <varlistentry>

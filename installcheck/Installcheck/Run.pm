@@ -1,5 +1,5 @@
 # vim:ft=perl
-# Copyright (c) 2005-2008 Zmanda Inc.  All Rights Reserved.
+# Copyright (c) 2008,2009 Zmanda, Inc.  All Rights Reserved.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published
@@ -337,7 +337,7 @@ sub run {
     local (*INFH, *OUTFH, *ERRFH);
     open(ERRFH, ">", $errtempfile);
 
-    $app = "$sbindir/$app" unless ($app =~ qr{^/});
+    $app = "$sbindir/$app" unless ($app =~ qr{/});
     my $pid = IPC::Open3::open3("INFH", "OUTFH", ">&ERRFH",
 	"$app", @args);
     
@@ -366,7 +366,7 @@ sub run {
 
 sub run_get {
     if (!run @_) {
-	Test::More::diag("run unexpectedly failed; no output to compare");
+	Test::More::diag("run unexpectedly failed; no output to compare; stderr is:\n$stderr");
 	return '';
     }
 

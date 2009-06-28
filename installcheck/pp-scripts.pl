@@ -1,4 +1,4 @@
-# Copyright (c) 2005-2008 Zmanda Inc.  All Rights Reserved.
+# Copyright (c) 2008,2009 Zmanda, Inc.  All Rights Reserved.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published
@@ -16,7 +16,7 @@
 # Contact information: Zmanda Inc, 465 S Mathlida Ave, Suite 300
 # Sunnyvale, CA 94086, USA, or: http://www.zmanda.com
 
-use Test::More tests => 8;
+use Test::More tests => 10;
 
 use lib "@amperldir@";
 use Cwd qw(abs_path getcwd);
@@ -49,7 +49,9 @@ sub verify_log {
 
     my $linenum = 1;
     foreach $exp (@exp) {
+	chomp $exp;
 	$got = <$logfile>;
+	chomp $got;
 	if (!$got) {
 	    fail($msg);
 	    diag("    Line: $linenum");
@@ -58,7 +60,7 @@ sub verify_log {
 	    diag($exp);
 	    return;
 	}
-	chomp $got;
+	$got =~ s/ *$//g;
 	if ($got ne $exp) {
 	    fail($msg);
 	    diag("    Line: $linenum");
@@ -107,8 +109,8 @@ unlink $templog;
 ok(run('amcheck', '-c', 'TESTCONF'), "amcheck runs successfully for client scripts.");
 
 verify_log("amcheck invokes correct script commands",
-    "TESTCONF pre-dle-amcheck client localhost diskname1 $diskname ",
-    "TESTCONF post-dle-amcheck client localhost diskname1 $diskname ",
+    "TESTCONF pre-dle-amcheck client localhost diskname1 $diskname",
+    "TESTCONF post-dle-amcheck client localhost diskname1 $diskname",
 );
 
 unlink $templog;
@@ -150,8 +152,8 @@ unlink $templog;
 ok(run('amcheck', '-c', 'TESTCONF'), "amcheck runs successfully for server scripts.");
 
 verify_log("amcheck invokes correct script commands",
-    "TESTCONF pre-host-amcheck server localhost diskname2 $diskname ",
-    "TESTCONF post-host-amcheck server localhost diskname2 $diskname ",
+    "TESTCONF pre-host-amcheck server localhost diskname2 $diskname",
+    "TESTCONF post-host-amcheck server localhost diskname2 $diskname",
 );
 
 unlink $templog;
@@ -161,9 +163,62 @@ ok(run('amdump', 'TESTCONF'), "amdump runs successfully for server scripts.")
 verify_log("amdump invokes correct script commands",
     "TESTCONF pre-host-estimate server localhost diskname2 $diskname 0",
     "TESTCONF post-host-estimate server localhost diskname2 $diskname 0",
-    "TESTCONF pre-host-backup server localhost diskname2 $diskname ",
-    "TESTCONF post-host-backup server localhost diskname2 $diskname ",
+    "TESTCONF pre-host-backup server localhost diskname2 $diskname",
+    "TESTCONF post-host-backup server localhost diskname2 $diskname",
 );
+
+unlink $templog;
+Installcheck::Run::cleanup();
+
+#check order script
+$testconf = Installcheck::Run::setup();
+$testconf->add_param('label_new_tapes', '"TESTCONF%%"');
+
+$testconf->add_dle(<<EODLE);
+localhost diskname2 $diskname {
+    installcheck-test
+    program "APPLICATION"
+    application {
+	plugin "amgtar"
+	property "atime-preserve" "no"
+    }
+    script {
+	plugin "amlog-script"
+	execute-where client
+	execute-on pre-host-amcheck
+	property "logfile" "$templog"
+	property "TEXT" "50"
+	order 50
+    }
+    script {
+	plugin "amlog-script"
+	execute-where client
+	execute-on pre-host-amcheck
+	property "logfile" "$templog"
+	property "TEXT" "60"
+	order 60
+    }
+    script {
+	plugin "amlog-script"
+	execute-where client
+	execute-on pre-host-amcheck
+	property "logfile" "$templog"
+	property "TEXT" "40"
+	order 40
+    }
+}
+EODLE
+$testconf->write();
+
+unlink $templog;
+ok(run('amcheck', '-c', 'TESTCONF'), "amcheck runs successfully for ordered scripts.");
+
+verify_log("amcheck invokes script in correct order",
+    "TESTCONF pre-host-amcheck client localhost diskname2 $diskname  40",
+    "TESTCONF pre-host-amcheck client localhost diskname2 $diskname  50",
+    "TESTCONF pre-host-amcheck client localhost diskname2 $diskname  60",
+);
+
 
 unlink $templog;
 Installcheck::Run::cleanup();

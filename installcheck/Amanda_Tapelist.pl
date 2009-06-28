@@ -1,4 +1,4 @@
-# Copyright (c) 2005-2008 Zmanda Inc.  All Rights Reserved.
+# Copyright (c) 2008 Zmanda, Inc.  All Rights Reserved.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published
@@ -112,27 +112,27 @@ SKIP: {
     $tl->add_tapelabel("20080112010203", "TESTCONF007", "seven");
     is(scalar @$tl, 5, "add_tapelabel adds a new element to the tapelist");
 
-    is_deeply($tl->lookup_tapepos(5),
+    is_deeply($tl->lookup_tapepos(1),
 	{ 'datestamp' => '20080112010203', 'label' => 'TESTCONF007',
-	  'reuse' => 1, 'position' => 5, 'comment' => 'seven' },
-	".. lookup_tapepos finds it");
+	  'reuse' => 1, 'position' => 1, 'comment' => 'seven' },
+	".. lookup_tapepos finds it at the beginning");
 
     is_deeply($tl->lookup_tapelabel("TESTCONF007"),
 	{ 'datestamp' => '20080112010203', 'label' => 'TESTCONF007',
-	  'reuse' => 1, 'position' => 5, 'comment' => 'seven' },
+	  'reuse' => 1, 'position' => 1, 'comment' => 'seven' },
 	".. lookup_tapelabel finds it");
 
     is_deeply($tl->lookup_tapedate("20080112010203"),
 	{ 'datestamp' => '20080112010203', 'label' => 'TESTCONF007',
-	  'reuse' => 1, 'position' => 5, 'comment' => 'seven' },
+	  'reuse' => 1, 'position' => 1, 'comment' => 'seven' },
 	".. lookup_tapedate finds it");
 
     $tl->remove_tapelabel("TESTCONF002");
     is(scalar @$tl, 4, "remove_tapelabel removes an element from the tapelist");
 
     is_deeply($tl->lookup_tapepos(4), # used to be in position 5
-	{ 'datestamp' => '20080112010203', 'label' => 'TESTCONF007',
-	  'reuse' => 1, 'position' => 4, 'comment' => 'seven' },
+	{ 'datestamp' => '20071108010001', 'label' => 'TESTCONF001',
+	  'reuse' => '', 'position' => 4, 'comment' => 'comment 1' },
 	".. tape positions are adjusted correctly");
 
     is_deeply($tl->lookup_tapelabel("TESTCONF002"), undef,

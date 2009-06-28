@@ -1,27 +1,29 @@
 /*
- * Copyright (c) Zmanda, Inc.  All Rights Reserved.
+ * Copyright (c) 2008,2009 Zmanda, Inc.  All Rights Reserved.
  *
- * This library is free software; you can redistribute it and/or modify it
- * under the terms of the GNU Lesser General Public License version 2.1
- * as published by the Free Software Foundation.
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 as published
+ * by the Free Software Foundation.
  *
- * This library is distributed in the hope that it will be useful, but
+ * This program is distributed in the hope that it will be useful, but
  * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
- * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
- * License for more details.
+ * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * for more details.
  *
- * You should have received a copy of the GNU Lesser General Public License
- * along with this library; if not, write to the Free Software Foundation,
- * Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA.
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  *
- * Contact information: Zmanda Inc., 465 S Mathlida Ave, Suite 300
- * Sunnyvale, CA 94086, USA, or: http://www.zmanda.com
+ * Contact information: Zmanda Inc., 465 N Mathlida Ave, Suite 300
+ * Sunnyvale, CA 94085, USA, or: http://www.zmanda.com
  */
 
 %module "Amanda::Application"
 %include "amglue/amglue.swg"
 %include "exception.i"
 %include "cstring.i"
+
+%include "Amanda/Application.pod"
 
 %perlcode %{
 push @ISA, qw(Amanda::Script_App);
@@ -31,39 +33,6 @@ use strict;
 use warnings;
 use Amanda::Config qw( :init :getconf  config_dir_relative );
 
-=head1 NAME
-
-Amanda::Application - perl utility functions for Applications.
-
-=head1 SYNOPSIS
-
-  package Amanda::Application::my_application;
-  use base qw(Amanda::Application);
-
-  sub new {
-    my ($class, $config, $foo) = @_;
-    my $self = $class->SUPER::new($config);
-
-    $self->{'foo'} = $foo;
-    $self->{'bar'} = $bar;
-
-    return $self;
-  }
-
-  # Define all command_* subs that you need, e.g.,
-  sub command_support {
-    my $self = shift;
-    # ...
-  }
-
-  package main;
-
-  # .. parse arguments ..
-
-  my $application = Amanda::Application::my_application->new($opt_foo, $opt_bar);
-  $application->do($cmd);
-
-=cut
 
 sub new {
     my $class = shift @_;

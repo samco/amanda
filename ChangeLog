@@ -1,3 +1,273 @@
+2009-06-26  Jean-Louis Martineau <martineau@zmanda.com>
+	* common-src/conffile.c: New ORDER keyword in script section.
+	* common-src/conffile.h: New ORDER keyword in script section.
+	* man/xml-source/amanda.conf.5.xml: Document ORDER keyword.
+	* perl/Amanda/Config.swg: Bing ORDER keyword.
+	* application-src/amlog-script.pl: Add --text parameter.
+	* installcheck/pp-scripts.pl: Check execution order.
+
+2009-06-26  Jean-Louis Martineau <martineau@zmanda.com>
+	* restore-src/amfetchdump.c, restore-src/amrestore.c,
+	  restore-src/restore.c: Add debugging.
+
+2009-06-22  Jean-Louis Martineau <martineau@zmanda.com>
+	* server-src/amlabel.c: Relabel VOLUME_ERROR tape if -f.
+
+2009-06-19 Dan Locks <dwlocks@zmanda.com>
+	* packaging/deb/rules, packaging/rpm/amanda.spec: apply "quiet"
+	  changes to packages.
+
+2009-06-19 Dan Locks <dwlocks@zmanda.com>
+	* packaging/deb/server/control, packaging/deb/client/control: update
+	  depends to list libcurl3 or 4.
+
+2009-06-19  Dustin J. Mitchell <dustin@zmanda.com>
+	* perl/Amanda/Tapelist.swg: add tapes at the beginning and be
+	  explicit about maintaining tape order with a stable sort
+	* perl/Amanda/Tapelist.pod: document it
+	* man/xml-source/tapelist.5.xml: manpages too
+	* installcheck/Amanda_Tapelist.pl: test it
+	* installcheck/Makefile.am: sort alphabetically
+
+2009-06-19  Dustin J. Mitchell <dustin@zmanda.com>
+	* perl/Amanda/Util.swg: expose get_fs_usage in perl
+	* installcheck/Amanda_Util.pl: test it
+	* perl/Amanda/Util.pod: document it
+
+2009-06-19  Jean-Louis Martineau <martineau@zmanda.com>
+	* server-src/reporter.c: Use the filenum from the PART line.
+	                         Keep the filenum of the first part.
+
+2009-06-19  Nikolas Coukouma <atrus@zmanda.com>
+	* amar-src/amar.c, amar-src/amar.h, amar-src/amarchiver.c,
+	  application-src/amlog-script.pl, application-src/ampgsql.pl,
+	  application-src/amsamba.pl, application-src/amsuntar.pl,
+	  application-src/amzfs-sendrecv.pl, application-src/amzfs-snapshot.pl,
+	  application-src/script-email.pl, changer-src/chg-glue.pl,
+	  common-src/amaespipe.sh, common-src/amcryptsimple.pl,
+	  common-src/amgetconf.pl, common-src/amgpgcrypt.pl,
+	  common-src/event-test.c, common-src/glib-util.c,
+	  common-src/glib-util.h, common-src/queueing-test.c,
+	  common-src/queueing.c, common-src/queueing.h,
+	  common-src/quoting-test.c, common-src/semaphore-test.c,
+	  common-src/semaphore.c, common-src/semaphore.h,
+	  common-src/simpleprng.c, common-src/simpleprng.h,
+	  common-src/sockaddr-util.c, common-src/sockaddr-util.h,
+	  common-src/testutils.c, common-src/testutils.h,
+	  config/automake/scripts.am, config/automake/vars.am,
+	  config/macro-archive/docbook-dtd.m4,
+	  config/macro-archive/docbook-xslt-min.m4,
+	  config/macro-archive/docbook-xslt.m4,
+	  config/macro-archive/xsltproc.m4, device-src/amdevcheck.pl,
+	  device-src/amtapetype.pl, device-src/device-queueing.c,
+	  device-src/device-queueing.h, device-src/device.c,
+	  device-src/device.h, device-src/null-device.c, device-src/property.c,
+	  device-src/property.h, device-src/rait-device.c,
+	  device-src/s3-device.c, device-src/s3-util.c, device-src/s3-util.h,
+	  device-src/s3.c, device-src/s3.h, device-src/tape-aix.c,
+	  device-src/tape-device.c, device-src/tape-device.h,
+	  device-src/tape-ops.h, device-src/tape-posix.c,
+	  device-src/tape-uware.c, device-src/tape-xenix.c,
+	  device-src/vfs-device.c, device-src/vfs-test.c,
+	  device-src/xfer-dest-device.c, device-src/xfer-dest-taper.c,
+	  device-src/xfer-device.h, device-src/xfer-source-device.c,
+	  installcheck/Amanda_Archive.pl, installcheck/Amanda_Changer.pl,
+	  installcheck/Amanda_Changer_compat.pl,
+	  installcheck/Amanda_Changer_disk.pl,
+	  installcheck/Amanda_Changer_null.pl,
+	  installcheck/Amanda_Changer_rait.pl,
+	  installcheck/Amanda_Changer_single.pl, installcheck/Amanda_Cmdline.pl,
+	  installcheck/Amanda_Config.pl, installcheck/Amanda_DB_Catalog.pl,
+	  installcheck/Amanda_Debug.pl, installcheck/Amanda_Device.pl,
+	  installcheck/Amanda_Disklist.pl, installcheck/Amanda_Header.pl,
+	  installcheck/Amanda_Holding.pl,
+	  installcheck/Amanda_IPC_LineProtocol.pl,
+	  installcheck/Amanda_Logfile.pl, installcheck/Amanda_MainLoop.pl,
+	  installcheck/Amanda_Process.pl, installcheck/Amanda_Tapelist.pl,
+	  installcheck/Amanda_Util.pl, installcheck/Amanda_Xfer.pl,
+	  installcheck/Amanda_Xfer_serveronly.pl, installcheck/Installcheck.pm,
+	  installcheck/Installcheck/Application.pm,
+	  installcheck/Installcheck/Changer.pm,
+	  installcheck/Installcheck/Config.pm,
+	  installcheck/Installcheck/Dumpcache.pm,
+	  installcheck/Installcheck/Mock.pm, installcheck/Installcheck/Run.pm,
+	  installcheck/_setupcache.pl, installcheck/amarchiver.pl,
+	  installcheck/amcheckdump.pl, installcheck/amdevcheck.pl,
+	  installcheck/amdump.pl, installcheck/amfetchdump.pl,
+	  installcheck/amgetconf.pl, installcheck/amgtar.pl,
+	  installcheck/ampgsql.pl, installcheck/amreport.pl,
+	  installcheck/amrmtape.pl, installcheck/amservice.pl,
+	  installcheck/amstatus.pl, installcheck/amtape.pl,
+	  installcheck/amtapetype.pl, installcheck/bigint.pl,
+	  installcheck/mock/mtx.pl, installcheck/mock_mtx.pl,
+	  installcheck/pp-scripts.pl, installcheck/taper.pl,
+	  perl/Amanda/Application.pod, perl/Amanda/Application.swg,
+	  perl/Amanda/Application/Zfs.pm, perl/Amanda/Archive.pod,
+	  perl/Amanda/Archive.swg, perl/Amanda/BigIntCompat.pm,
+	  perl/Amanda/Changer.pm, perl/Amanda/Changer/compat.pm,
+	  perl/Amanda/Changer/disk.pm, perl/Amanda/Changer/null.pm,
+	  perl/Amanda/Changer/rait.pm, perl/Amanda/Changer/single.pm,
+	  perl/Amanda/Cmdline.pod, perl/Amanda/Cmdline.swg,
+	  perl/Amanda/Config.pod, perl/Amanda/Config.swg,
+	  perl/Amanda/Constants.pm.in, perl/Amanda/DB/Catalog.pm,
+	  perl/Amanda/Debug.pod, perl/Amanda/Debug.swg, perl/Amanda/Device.pod,
+	  perl/Amanda/Device.swg, perl/Amanda/Disklist.pod,
+	  perl/Amanda/Disklist.swg, perl/Amanda/Header.pod,
+	  perl/Amanda/Header.swg, perl/Amanda/Holding.pm,
+	  perl/Amanda/IPC/LineProtocol.pm, perl/Amanda/Logfile.pod,
+	  perl/Amanda/Logfile.swg, perl/Amanda/MainLoop.pod,
+	  perl/Amanda/MainLoop.swg, perl/Amanda/Paths.pm.in,
+	  perl/Amanda/Process.pm, perl/Amanda/Script.pm,
+	  perl/Amanda/Script_App.pm, perl/Amanda/Tapelist.pod,
+	  perl/Amanda/Tapelist.swg, perl/Amanda/Tests.pod,
+	  perl/Amanda/Tests.swg, perl/Amanda/Util.pod, perl/Amanda/Util.swg,
+	  perl/Amanda/Xfer.pod, perl/Amanda/Xfer.swg,
+	  perl/Amanda/XferServer.pod, perl/Amanda/XferServer.swg,
+	  perl/amglue/amglue.h, perl/amglue/amglue.swg, perl/amglue/bigint.c,
+	  perl/amglue/constants.swg, perl/amglue/dumpspecs.swg,
+	  perl/amglue/exports.swg, perl/amglue/filehandles.swg,
+	  perl/amglue/ghashtable.c, perl/amglue/glib.swg,
+	  perl/amglue/integers.swg, perl/amglue/objwrap.c, perl/amglue/source.c,
+	  perl/amglue/xferwrap.c, perl/make_html.pl, server-src/amaddclient.pl,
+	  server-src/amcheckdump.pl, server-src/amcleanup.pl,
+	  server-src/amrmtape.pl, server-src/amserverconfig.pl,
+	  server-src/amvault.pl, server-src/cmdline.c, server-src/cmdline.h,
+	  server-src/taper-disk-port-source.c,
+	  server-src/taper-disk-port-source.h, server-src/taper-file-source.c,
+	  server-src/taper-file-source.h, server-src/taper-mem-port-source.c,
+	  server-src/taper-mem-port-source.h, server-src/taper-port-source.c,
+	  server-src/taper-port-source.h, server-src/taper-source.c,
+	  server-src/taper-source.h, server-src/taperscan.c,
+	  server-src/taperscan.h, server-src/xfer-server.h,
+	  server-src/xfer-source-holding.c, xfer-src/amxfer.h,
+	  xfer-src/dest-fd.c, xfer-src/dest-null.c, xfer-src/element-glue.c,
+	  xfer-src/element-glue.h, xfer-src/filter-xor.c, xfer-src/source-fd.c,
+	  xfer-src/source-pattern.c, xfer-src/source-random.c,
+	  xfer-src/xfer-element.c, xfer-src/xfer-element.h,
+	  xfer-src/xfer-test.c, xfer-src/xfer.c, xfer-src/xfer.h,
+	  xfer-src/xmsg.c, xfer-src/xmsg.h:
+	  update/correct copyright notice years
+
+2009-06-17  Dustin J. Mitchell <dustin@zmanda.com>
+	* config/automake/scripts.am: support scripts with subdirs
+
+2009-06-17  Dustin J. Mitchell <dustin@zmanda.com>
+	* installcheck/mock/mtx.pl: new "mock" mtx for testing
+	* installcheck/mock_mtx.pl: test the test mtx
+	* installcheck/Installcheck/Mock.pm: support for using mtx
+	* installcheck/Installcheck/Run.pm: don't apply sbindir if there
+	  are any slashes in the app name
+	* installcheck/Makefile.am: new files
+
+2009-06-16  Jean-Louis Martineau <martineau@zmanda.com>
+	* server-src/planner.c: Fix for bump from level 9 to 10.
+
+2009-06-13  Dustin J. Mitchell <dustin@zmanda.com>
+	* installcheck/Amanda_Changer_compat.pl: add test case for concurrent
+	  calls to chg-compat's info() (tests the fix committed 2009-06-01)
+
+2009-06-12  Dustin J. Mitchell <dustin@zmanda.com>
+	* config/amanda/flags.m4: fix --enable-werror macro
+
+2009-06-12  Jean-Louis Martineau <martineau@zmanda.com>
+	* server-src/planner.c: Print how tape_length is computed.
+
+2009-06-12  Jean-Louis Martineau <martineau@zmanda.com>
+	* amandad-src/amandad.c: Fix for configured with CLIENT_LOGIN=root
+	* man/xml-source/amanda-client.conf.5.xml: Typo.
+	* man/xml-source/amanda.conf.5.xml: Add ssh_keys.
+
+2009-06-11  Nikolas Coukouma <atrus@zmanda.com>
+	* amar-src/amar.c, amar-src/amar.h, amar-src/amarchiver.c,
+	  common-src/glib-util.c, common-src/glib-util.h, common-src/queueing.c,
+	  common-src/queueing.h, common-src/semaphore-test.c,
+	  common-src/semaphore.c, common-src/semaphore.h,
+	  config/automake/scripts.am, config/automake/vars.am,
+	  device-src/device-queueing.c, device-src/device-queueing.h,
+	  device-src/device.c, device-src/device.h, device-src/null-device.c,
+	  device-src/property.c, device-src/property.h,
+	  device-src/rait-device.c, device-src/s3-device.c,
+	  device-src/s3-util.c, device-src/s3-util.h, device-src/s3.c,
+	  device-src/s3.h, device-src/tape-aix.c, device-src/tape-device.c,
+	  device-src/tape-device.h, device-src/tape-ops.h,
+	  device-src/tape-posix.c, device-src/tape-uware.c,
+	  device-src/tape-xenix.c, device-src/vfs-device.c,
+	  device-src/vfs-test.c, device-src/xfer-dest-device.c,
+	  device-src/xfer-dest-taper.c, device-src/xfer-device.h,
+	  device-src/xfer-source-device.c, perl/Amanda/Application.pod,
+	  perl/Amanda/Application.swg, perl/Amanda/Application/Zfs.pm,
+	  perl/Amanda/Archive.pod, perl/Amanda/Archive.swg,
+	  perl/Amanda/BigIntCompat.pm, perl/Amanda/Changer.pm,
+	  perl/Amanda/Changer/compat.pm, perl/Amanda/Changer/disk.pm,
+	  perl/Amanda/Changer/null.pm, perl/Amanda/Changer/rait.pm,
+	  perl/Amanda/Changer/single.pm, perl/Amanda/Cmdline.pod,
+	  perl/Amanda/Cmdline.swg, perl/Amanda/Config.pod,
+	  perl/Amanda/Config.swg, perl/Amanda/Constants.pm.in,
+	  perl/Amanda/Debug.pod, perl/Amanda/Debug.swg, perl/Amanda/Device.pod,
+	  perl/Amanda/Device.swg, perl/Amanda/Disklist.pod,
+	  perl/Amanda/Disklist.swg, perl/Amanda/Header.pod,
+	  perl/Amanda/Header.swg, perl/Amanda/Holding.pm,
+	  perl/Amanda/IPC/LineProtocol.pm, perl/Amanda/Logfile.pod,
+	  perl/Amanda/Logfile.swg, perl/Amanda/MainLoop.pod,
+	  perl/Amanda/MainLoop.swg, perl/Amanda/Paths.pm.in,
+	  perl/Amanda/Process.pm, perl/Amanda/Script.pm,
+	  perl/Amanda/Script_App.pm, perl/Amanda/Tapelist.pod,
+	  perl/Amanda/Tapelist.swg, perl/Amanda/Tests.pod,
+	  perl/Amanda/Tests.swg, perl/Amanda/Util.pod, perl/Amanda/Util.swg,
+	  perl/Amanda/Xfer.pod, perl/Amanda/Xfer.swg,
+	  perl/Amanda/XferServer.pod, perl/Amanda/XferServer.swg,
+	  perl/amglue/amglue.h, perl/amglue/amglue.swg, perl/amglue/bigint.c,
+	  perl/amglue/constants.swg, perl/amglue/dumpspecs.swg,
+	  perl/amglue/exports.swg, perl/amglue/filehandles.swg,
+	  perl/amglue/ghashtable.c, perl/amglue/glib.swg,
+	  perl/amglue/integers.swg, perl/amglue/objwrap.c, perl/amglue/source.c,
+	  perl/amglue/xferwrap.c, server-src/taper-disk-port-source.c,
+	  server-src/taper-disk-port-source.h, server-src/taper-file-source.c,
+	  server-src/taper-file-source.h, server-src/taper-mem-port-source.c,
+	  server-src/taper-mem-port-source.h, server-src/taper-port-source.c,
+	  server-src/taper-port-source.h, server-src/taper-source.c,
+	  server-src/taper-source.h, server-src/xfer-server.h,
+	  server-src/xfer-source-holding.c, xfer-src/amxfer.h,
+	  xfer-src/dest-fd.c, xfer-src/dest-null.c, xfer-src/element-glue.c,
+	  xfer-src/element-glue.h, xfer-src/filter-xor.c, xfer-src/source-fd.c,
+	  xfer-src/source-pattern.c, xfer-src/source-random.c,
+	  xfer-src/xfer-element.c, xfer-src/xfer-element.h, xfer-src/xfer.c,
+	  xfer-src/xfer.h, xfer-src/xmsg.c, xfer-src/xmsg.h:
+	  relincense LGPL files under the GPL
+
+2009-06-10  Paul C. Mantz <pcmantz@zmanda.com>
+	* perl/Amanda/Application.pod: moved from .swg file
+	* perl/Amanda/Application.swg: removed pod documentation
+	* perl/Amanda/Archive.pod: moved from .swg file
+	* perl/Amanda/Archive.swg: removed pod documentation
+	* perl/Amanda/Cmdline.pod: moved from .swg file
+	* perl/Amanda/Cmdline.swg: removed pod documentation
+	* perl/Amanda/Config.pod: moved from .swg file
+	* perl/Amanda/Config.swg: removed pod documentation
+	* perl/Amanda/Debug.pod: moved from .swg file
+	* perl/Amanda/Debug.swg: removed pod documentation
+	* perl/Amanda/Device.pod: moved from .swg file
+	* perl/Amanda/Device.swg: removed pod documentation
+	* perl/Amanda/Disklist.pod: moved from .swg file
+	* perl/Amanda/Disklist.swg: removed pod documentation
+	* perl/Amanda/Header.pod: moved from .swg file
+	* perl/Amanda/Header.swg: removed pod documentation
+	* perl/Amanda/Logfile.pod: moved from .swg file
+	* perl/Amanda/Logfile.swg: removed pod documentation
+	* perl/Amanda/MainLoop.pod: moved from .swg file
+	* perl/Amanda/MainLoop.swg: removed pod documentation
+	* perl/Amanda/Tapelist.pod: moved from .swg file
+	* perl/Amanda/Tapelist.swg: removed pod documentation
+	* perl/Amanda/Tests.pod: moved from .swg file
+	* perl/Amanda/Tests.swg: removed pod documentation
+	* perl/Amanda/Util.pod: moved from .swg file
+	* perl/Amanda/Util.swg: removed pod documentation
+	* perl/Amanda/Xfer.pod: moved from .swg file
+	* perl/Amanda/Xfer.swg: removed pod documentation
+	* perl/Amanda/XferServer.pod: moved from .swg file
+	* perl/Amanda/XferServer.swg: removed pod documentation
+	* perl/Makefile.am: added pod files to tar dist
+
 2009-06-05  Nikolas Coukouma <atrus@zmanda.com>
 	* installcheck/Amanda_Device.pl: test device named just "s3:"
 

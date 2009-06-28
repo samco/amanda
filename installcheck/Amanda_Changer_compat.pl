@@ -1,4 +1,4 @@
-# Copyright (c) 2005-2008 Zmanda Inc.  All Rights Reserved.
+# Copyright (c) 2008,2009 Zmanda, Inc.  All Rights Reserved.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License version 2 as published
@@ -16,7 +16,7 @@
 # Contact information: Zmanda Inc, 465 S Mathlida Ave, Suite 300
 # Sunnyvale, CA 94086, USA, or: http://www.zmanda.com
 
-use Test::More tests => 27;
+use Test::More tests => 28;
 use File::Path;
 use strict;
 use warnings;
@@ -394,6 +394,37 @@ die($chg) if $chg->isa("Amanda::Changer::Error");
 
     $get_info->();
     Amanda::MainLoop::run();
+}
+
+# test two simultaneous invocations of info()
+
+$chg = Amanda::Changer->new();
+die($chg) if $chg->isa("Amanda::Changer::Error");
+
+{
+    my %subs;
+    my $n_info_results = 0;
+
+    $subs{'get_infos'} = sub {
+        $chg->info(info_cb => $subs{'got_info_result'}, info => [ 'num_slots' ]);
+        $chg->info(info_cb => $subs{'got_info_result'}, info => [ 'fast_search' ]);
+    };
+
+    $subs{'got_info_result'} = sub {
+	my ($err, %info) = @_;
+	die $err if $err;
+	++$n_info_results;
+	if ($n_info_results >= 2) {
+	    Amanda::MainLoop::quit();
+	}
+    };
+
+    # convince the changer that it has not gotten any info yet
+    $chg->{'got_info'} = 0;
+
+    Amanda::MainLoop::call_later($subs{'get_infos'});
+    Amanda::MainLoop::run();
+    pass("two simultaneous info() invocations are successful");
 }
 
 unlink($changer_filename);

@@ -383,9 +383,15 @@ main(
     tape = lookup_tapetype(conf_tapetype);
     if(conf_maxdumpsize > (gint64)0) {
 	tape_length = conf_maxdumpsize;
+	g_fprintf(stderr, "planner: tape_length is set from maxdumpsize (%jd KB)\n",
+			 (intmax_t)conf_maxdumpsize);
     }
     else {
 	tape_length = tapetype_get_length(tape) * (gint64)conf_runtapes;
+	g_fprintf(stderr, "planner: tape_length is set from tape length (%jd KB) * runtapes (%d) == %jd KB\n",
+			 (intmax_t)tapetype_get_length(tape),
+			 conf_runtapes,
+			 (intmax_t)tape_length);
     }
     tape_mark = (size_t)tapetype_get_filemark(tape);
     tt_blocksize_kb = (size_t)tapetype_get_blocksize(tape);
@@ -2282,7 +2288,7 @@ static one_est_t *pick_inclevel(
 	    (long long)base_est->nsize, base_est->level, est(dp)->level_days,
 	    (long long)thresh, dp->bumpdays);
 
-    if(base_est->level == 9
+    if(base_est->level == (DUMP_LEVELS - 1)
        || est(dp)->level_days < dp->bumpdays
        || base_est->nsize <= thresh)
 	    return base_est;
