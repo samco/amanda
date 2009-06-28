@@ -511,6 +511,9 @@ dvdrw_device_finish(Device *dself)
 
 	g_debug("Finish device");
 
+	/* Save access mode before parent class messes with it */
+	mode = dself->access_mode;
+
 	if (device_in_error(dself))
 	{
 		if (mode == ACCESS_READ)
@@ -521,9 +524,6 @@ dvdrw_device_finish(Device *dself)
 
 		return FALSE;
 	}
-
-	/* Save access mode before parent class messes with it */
-	mode = dself->access_mode;
 
 	result = parent_class->finish(dself);
 
