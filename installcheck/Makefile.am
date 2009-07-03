@@ -36,6 +36,8 @@ server_tests = \
 	Amanda_Logfile \
 	Amanda_Process \
 	Amanda_Tapelist \
+	Amanda_Taper_Scan \
+	Amanda_Taper_Scan_traditional \
 	Amanda_Xfer_serveronly \
 	bigint \
 	taper \
@@ -64,6 +66,11 @@ mock_tests = \
 # mock scripts
 mocks = \
 	mock/mtx
+
+# data for test scripts
+test_data = \
+	data/aws-bundle.crt
+EXTRA_DIST += $(test_data)
 
 tests =
 

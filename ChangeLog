@@ -1,3 +1,33 @@
+2009-06-30  Dustin J. Mitchell <dustin@zmanda.com>
+	* perl/Makefile.am: change "Scribe.pm" to "Scan.pm"
+
+2009-06-30  Dustin J. Mitchell <dustin@zmanda.com>
+	* perl/Amanda/Taper/Scan.pm perl/Amanda/Taper/Scan/traditional.pm
+	  perl/Makefile.am: add Perl implementation of the traditional taperscan
+	  algorithm
+	* installcheck/Amanda_Taper_Scan.pl
+	  installcheck/Amanda_Taper_Scan_traditional.pl
+	  installcheck/Makefile.am: test
+	* perl/Amanda/Changer/disk.pm: test support tweak
+	* man/Makefile.am man/xml-source/amanda-taperscan.7.xml: new manpage
+	  with a full description of the traditional algo
+	* man/xml-source/amanda-changers.7.xml: mention which changers are fast-search
+
+2009-06-30  Dustin J. Mitchell <dustin@zmanda.com>
+	* perl/Amanda/MainLoop.swg: add synchronized()
+	* perl/Amanda/MainLoop.pod: document it
+	* installcheck/Amanda_MainLoop.pl: test it
+	* perl/Amanda/Changer/compat.pm: and use it
+
+2009-06-29  Nikolas Coukouma <atrus@zmanda.com>
+	* device-src/s3.c, installcheck/Amanda_Device.pl:
+	  Don't allow dots in bucket names, for compatability with
+	  libcurl built against NSS.
+
+2009-06-29  Nikolas Coukouma <atrus@zmanda.com>
+	* Amanda_Device.pl, Makefile.am, data/aws-bundle.crt:
+	  Test using a certificate bundle with the S3 device
+
 2009-06-26  Jean-Louis Martineau <martineau@zmanda.com>
 	* common-src/conffile.c: New ORDER keyword in script section.
 	* common-src/conffile.h: New ORDER keyword in script section.

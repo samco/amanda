@@ -16,7 +16,7 @@
 # Contact information: Zmanda Inc, 465 S Mathlida Ave, Suite 300
 # Sunnyvale, CA 94086, USA, or: http://www.zmanda.com
 
-use Test::More tests => 332;
+use Test::More tests => 347;
 use File::Path qw( mkpath rmtree );
 use Sys::Hostname;
 use Carp;
@@ -572,10 +572,10 @@ my $base_name;
 
 SKIP: {
     skip "define \$INSTALLCHECK_S3_{SECRET,ACCESS}_KEY to run S3 tests",
-            57 +
+            60 +
             1 * $verify_file_count +
             4 * $write_file_count +
-            7 * $s3_make_device_count
+            9 * $s3_make_device_count
 	unless $run_s3_tests;
 
     $dev_name = "s3:";
@@ -653,6 +653,7 @@ SKIP: {
          "error message mentions property type");
 
     my $hostname  = hostname();
+    $hostname =~ s/\./-/g;
     $base_name = "$S3_ACCESS_KEY-installcheck-$hostname";
     $dev_name = "s3:$base_name-s3";
     $dev = s3_make_device($dev_name, "s3");
@@ -792,8 +793,31 @@ SKIP: {
 	    or diag($dev->error_or_status());
     }
 
-    # bucket name incompatible with location constraint
+    # test again with minimal CA bundle
+    $dev = s3_make_device($dev_name, "s3");
+    SKIP: {
+	skip "SSL not supported; can't check SSL_CA_INFO", 2
+	    unless $dev->property_get('S3_SSL');
+	ok($dev->property_set('SSL_CA_INFO', 'data/aws-bundle.crt'),
+	   "set minimal SSL/TLS CA certificate bundle")
+	    or diag($dev->error_or_status());
+
+	$dev->read_label();
+	$status = $dev->status();
+        ok(($status == $DEVICE_STATUS_SUCCESS) || (($status & $DEVICE_STATUS_VOLUME_UNLABELED) != 0),
+	   "status is OK or just unlabeled")
+	    or diag($dev->error_or_status());
+    }
+
+    # bucket names incompatible with location constraint
     $dev_name = "s3:-$base_name-s3-eu";
+    $dev = s3_make_device($dev_name, "s3");
+
+    ok($dev->property_set('S3_BUCKET_LOCATION', ''),
+       "should be able to set an empty S3 bucket location with an incompatible name")
+        or diag($dev->error_or_status());
+
+    $dev_name = "s3:$base_name-s3.eu";
     $dev = s3_make_device($dev_name, "s3");
 
     ok($dev->property_set('S3_BUCKET_LOCATION', ''),
