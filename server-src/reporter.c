@@ -48,7 +48,6 @@
 #include "diskfile.h"
 #include "infofile.h"
 #include "logfile.h"
-#include "version.h"
 #include "util.h"
 #include "timestamp.h"
 #include "holding.h"
@@ -347,7 +346,7 @@ main(
     int mailout = 1;
     char *mailto = NULL;
     char *lbl_templ = NULL;
-    config_overwrites_t *cfg_ovr = NULL;
+    config_overrides_t *cfg_ovr = NULL;
     char *cfg_opt = NULL;
     char *mailer;
 
@@ -394,7 +393,7 @@ main(
 	cfg_opt = argv[1];
 	--argc; ++argv;
 
-	cfg_ovr = new_config_overwrites(argc/2);
+	cfg_ovr = new_config_overrides(argc/2);
 	while((opt = getopt(argc, argv, "o:M:f:l:p:i")) != EOF) {
 	    switch(opt) {
 	    case 'i': 
@@ -446,7 +445,7 @@ main(
 		}
                 break;
 	    case 'o':
-		add_config_overwrite_opt(cfg_ovr, optarg);
+		add_config_override_opt(cfg_ovr, optarg);
 		break;
             case '?':
 		usage();
@@ -470,7 +469,7 @@ main(
 
     /* ignore any errors reading the config file (amreport can run without a config) */
     config_init(CONFIG_INIT_EXPLICIT_NAME | CONFIG_INIT_USE_CWD, cfg_opt);
-    apply_config_overwrites(cfg_ovr);
+    apply_config_overrides(cfg_ovr);
 
     if (config_errors(NULL) >= CFGERR_WARNINGS) {
 	config_print_errors();
@@ -766,8 +765,7 @@ main(
 		g_fprintf(mailf,_("DUMP SUMMARY:\n"));
 		output_summary();
     	}
-    	g_fprintf(mailf,_("\n(brought to you by Amanda version %s)\n"),
-	    	version());
+    	g_fprintf(mailf,_("\n(brought to you by Amanda version %s)\n"), VERSION);
     }
 
     if (postscript) {
@@ -3031,7 +3029,7 @@ do_postscript_output(void)
 	/* generate a few elements */
 	g_fprintf(postscript,"(%s) DrawDate\n\n",
 		    nicedate(run_datestamp ? run_datestamp : "0"));
-	g_fprintf(postscript,_("(Amanda Version %s) DrawVers\n"),version());
+	g_fprintf(postscript,_("(Amanda Version %s) DrawVers\n"),VERSION);
 	g_fprintf(postscript,"(%s) DrawTitle\n", current_tape->label);
 
 	/* Stats */

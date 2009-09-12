@@ -16,7 +16,7 @@
 # Contact information: Zmanda Inc, 465 S Mathlida Ave, Suite 300
 # Sunnyvale, CA 94086, USA, or: http://www.zmanda.com
 
-use Test::More tests => 149;
+use Test::More tests => 159;
 use strict;
 
 use lib "@amperldir@";
@@ -27,9 +27,10 @@ use Amanda::Config qw( :init :getconf );
 use Amanda::Debug;
 
 my $testconf;
-my $config_overwrites;
+my $config_overrides;
 
 Amanda::Debug::dbopen("installcheck");
+Installcheck::log_test_output();
 
 # utility function
 
@@ -51,9 +52,9 @@ is(config_init(0, undef), $CFGERR_OK,
     "Initialize with no configuration, passing a NULL config name")
     or diag_config_errors();
 
-$config_overwrites = new_config_overwrites(1);
-add_config_overwrite($config_overwrites, "tapedev", "null:TEST");
-apply_config_overwrites($config_overwrites);
+$config_overrides = new_config_overrides(1);
+add_config_override($config_overrides, "tapedev", "null:TEST");
+apply_config_overrides($config_overrides);
 
 is(getconf($CNF_TAPEDEV), "null:TEST",
     "config overwrites work with null config");
@@ -62,7 +63,7 @@ is(getconf($CNF_TAPEDEV), "null:TEST",
 # Check out error handling
 
 $testconf = Installcheck::Config->new();
-$testconf->add_param('rawtapedev', '"/dev/medium-rare-please"'); # a deprecated keyword -> warning
+$testconf->add_param('tapebufs', '13'); # a deprecated keyword -> warning
 $testconf->write();
 
 {
@@ -426,7 +427,11 @@ SKIP: { # application
 
     is_deeply([ sort(+getconf_list("application-tool")) ],
 	      [ sort("my_app") ],
-	"getconf_list lists all application-tool");
+	"getconf_list lists all applications");
+    # test backward compatibility
+    is_deeply([ sort(+getconf_list("application")) ],
+	      [ sort("my_app") ],
+	"getconf_list works for 'application-tool', too");
 }
 
 SKIP: { # script
@@ -445,9 +450,13 @@ SKIP: { # script
 	$EXECUTE_ON_PRE_HOST_BACKUP|$EXECUTE_ON_POST_HOST_BACKUP,
 	"script execute_on");
 
+    is_deeply([ sort(+getconf_list("script")) ],
+	      [ sort("my_script") ],
+	"getconf_list lists all script");
+
     is_deeply([ sort(+getconf_list("script-tool")) ],
 	      [ sort("my_script") ],
-	"getconf_list lists all script-tool");
+	"getconf_list works for 'script-tool', too");
 }
 
 SKIP: { # device
@@ -504,21 +513,21 @@ SKIP: { # changer
 ##
 # Test config overwrites (using the config from above)
 
-$config_overwrites = new_config_overwrites(1); # note estimate is too small
-add_config_overwrite($config_overwrites, "tapedev", "null:TEST");
-add_config_overwrite($config_overwrites, "tpchanger", "chg-test");
-add_config_overwrite_opt($config_overwrites, "org=KAOS");
-apply_config_overwrites($config_overwrites);
+$config_overrides = new_config_overrides(1); # note estimate is too small
+add_config_override($config_overrides, "tapedev", "null:TEST");
+add_config_override($config_overrides, "tpchanger", "chg-test");
+add_config_override_opt($config_overrides, "org=KAOS");
+apply_config_overrides($config_overrides);
 
 is(getconf($CNF_TAPEDEV), "null:TEST",
     "config overwrites work with real config");
 is(getconf($CNF_ORG), "KAOS",
-    "add_config_overwrite_opt parsed correctly");
+    "add_config_override_opt parsed correctly");
 
 # introduce an error
-$config_overwrites = new_config_overwrites(1);
-add_config_overwrite($config_overwrites, "bogusparam", "foo");
-apply_config_overwrites($config_overwrites);
+$config_overrides = new_config_overrides(1);
+add_config_override($config_overrides, "bogusparam", "foo");
+apply_config_overrides($config_overrides);
 
 my ($error_level, @errors) = Amanda::Config::config_errors();
 is($error_level, $CFGERR_ERRORS, "bogus config overwrite flagged as an error");
@@ -836,4 +845,57 @@ SKIP: {
 				    values => [ "val2a", "val2", "val2b" ] }},
     "PROPERTY parameter of app2b parsed correctly");
 }
+
+
+##
+# Check getconf_byname and getconf_byname_strs
+
+$testconf = Installcheck::Config->new();
+$testconf->add_param('tapedev', '"thats a funny name"');
+$testconf->add_application('app1', [
+    'comment' => '"one"',
+]);
+$testconf->add_script('scr1', [
+    'comment' => '"one"',
+]);
+# check old names, too
+$testconf->add_text(<<EOF);
+define application-tool "app2" {
+    comment "two"
+}
+EOF
+$testconf->add_text(<<EOF);
+define script-tool "scr2" {
+    comment "two"
+}
+EOF
+$testconf->write();
+
+$cfg_result = config_init($CONFIG_INIT_EXPLICIT_NAME, "TESTCONF");
+is($cfg_result, $CFGERR_OK,
+    "getconf_byname")
+    or diag_config_errors();
+SKIP: {
+    skip "error loading config", 7 unless $cfg_result == $CFGERR_OK;
+
+    is(getconf_byname("Tapedev"), "thats a funny name",
+	"getconf_byname for global param");
+    is_deeply([ getconf_byname_strs("Tapedev", 1) ],
+	[ "\"thats a funny name\"" ],
+	"getconf_byname_strs for global param with quotes");
+    is_deeply([ getconf_byname_strs("Tapedev", 0) ],
+	[ "thats a funny name" ],
+	"getconf_byname_strs for global param without quotes");
+
+    # test * and *-tool (the old name)
+    is(getconf_byname("application-tool:app1:comment"), "one",
+	"getconf_byname for appplication-tool param");
+    is(getconf_byname("application:app2:comment"), "two",
+	"getconf_byname for application param");
+    is(getconf_byname("script-tool:scr1:comment"), "one",
+	"getconf_byname for appplication-tool param");
+    is(getconf_byname("script:scr2:comment"), "two",
+	"getconf_byname for script param");
+}
+
 

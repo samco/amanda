@@ -29,11 +29,11 @@
 <cmdsynopsis>
   <command>amgetconf</command>    
     <arg choice='opt'><replaceable>-l|--list</replaceable></arg>
-    <arg choice='plain' rep='repeat'><group><arg choice='plain'>-o </arg><replaceable>configoption</replaceable></group></arg>
     <arg choice='opt'><replaceable>--client</replaceable></arg>
     <arg choice='opt'><replaceable>--execute-where client|server</replaceable></arg>
     <arg choice='opt'><replaceable>config</replaceable></arg>
     <arg choice='plain'><replaceable>parameter</replaceable></arg>
+    &configoverride.synopsis;
 </cmdsynopsis>
 </refsynopsisdiv>
 
@@ -124,11 +124,9 @@ below (the difference is historical).</para>
                <term><literal>VERSION</literal></term>
                <term><literal>ASSERTIONS</literal></term>
                <term><literal>LOCKING</literal></term>
-               <term><literal>USE_VERSION_SUFFIXES</literal></term>
 
   <listitem><para>Build information.  <literal>ASSERTIONS</literal>
-  is 1 or empty, while <literal>USE_VERSION_SUFFIXES</literal> is
-  yes/no.</para></listitem>
+  is 1 or empty.</para></listitem>
  </varlistentry>
 
  <varlistentry><term><literal>DUMP</literal></term>

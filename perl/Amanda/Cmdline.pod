@@ -74,19 +74,25 @@ This function returns a string representing the formatted form of the
 given dumpspec.  This formatting is the same as performed by
 C<format_dumpspec_components>, but does not need a C<dumpspec_t>.
 
-=item C<parse_dumpspecs(@cmdline, $flags)>
+=item C<parse_dumpspecs([@cmdline], $flags)>
 
 This function parses C<@cmdline> into a list of C<dumpspec_t> objects,
 according to C<$flags>, which is a logical combination of zero or more
 of C<$CMDLINE_PARSE_DATESTAMP> to recognize datestamps and
 C<$CMDLINE_PARSE_LEVEL> to recognize levels.
 
+=item C<header_matches_dumpspecs($hdr, [@dumpspecs])>
+
+This function compares a header to a list of dumpspecs, returning true if the
+header matches at least one dumpspec.  If C<@dumpspecs> is empty, the function
+returns false.
+
 =back
 
 =head1 SEE ALSO
 
 L<Amanda::Config> handles C<-o> options itself, through
-C<config_overwrites>.
+C<config_overrides>.
 
 =cut
 

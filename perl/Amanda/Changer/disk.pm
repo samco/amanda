@@ -45,7 +45,7 @@ string, which it arranges as follows:
         |           | data -> '../slot4'
         |- drive1/ -|
         |           | data -> '../slot1'
-        |- current -> slot5
+        |- data -> slot5
         |- slot1/
         |- slot2/
         |- ...
@@ -53,7 +53,8 @@ string, which it arranges as follows:
 
 The user should create the desired number of C<slot$n> subdirectories.  The
 changer will take care of dynamically creating the drives as needed, and track
-the "current" slot using the eponymous symlink.
+the current slot using a "data" symlink.  This allows use of "file:$dir" as a
+device operating on the current slot, although note that it is unlocked.
 
 Drives are dynamically allocated as Amanda applications request access to
 particular slots.  Each drive is represented as a subdirectory containing a
@@ -62,9 +63,6 @@ particular slots.  Each drive is represented as a subdirectory containing a
 See the amanda-changers(7) manpage for usage information.
 
 =cut
-
-# TODO:
-# better locking (at least to work on a shared filesystem, if not NFS)
 
 sub new {
     my $class = shift;
@@ -81,6 +79,7 @@ sub new {
     my $self = {
 	dir => $dir,
 	config => $config,
+	state_filename => "$dir/state",
 
 	# this is set to 0 by various test scripts,
 	# notably Amanda_Taper_Scan_traditional
@@ -94,16 +93,26 @@ sub new {
 sub load {
     my $self = shift;
     my %params = @_;
+    my $old_res_cb = $params{'res_cb'};
+    my $state;
+
+    $self->validate_params('load', \%params);
 
     return if $self->check_error($params{'res_cb'});
 
-    if (exists $params{'slot'}) {
-        $self->_load_by_slot(%params);
-    } elsif (exists $params{'label'}) {
-        $self->_load_by_label(%params);
-    } else {
-	die "Invalid parameters to 'load'";
-    }
+    $self->with_locked_state($self->{'state_filename'},
+				     $params{'res_cb'}, sub {
+	my ($state, $res_cb) = @_;
+
+	# overwrite the callback for _load_by_xxx
+	$params{'res_cb'} = $res_cb;
+
+	if (exists $params{'slot'} or exists $params{'relative_slot'}) {
+	    $self->_load_by_slot(%params);
+	} elsif (exists $params{'label'}) {
+	    $self->_load_by_label(%params);
+	}
+    });
 }
 
 sub info_key {
@@ -112,6 +121,8 @@ sub info_key {
     my %results;
 
     return if $self->check_error($params{'info_cb'});
+
+    # no need for synchronization -- all of these values are static
 
     if ($key eq 'num_slots') {
 	my @slots = $self->_all_slots();
@@ -133,23 +144,65 @@ sub reset {
 
     return if $self->check_error($params{'finished_cb'});
 
-    $slot = (scalar @slots)? $slots[0] : 0;
-    $self->_set_current($slot);
+    $self->with_locked_state($self->{'state_filename'},
+				     $params{'finished_cb'}, sub {
+	my ($state, $finished_cb) = @_;
 
-    $params{'finished_cb'}->() if $params{'finished_cb'};
+	$slot = (scalar @slots)? $slots[0] : 0;
+	$self->_set_current($slot);
+
+	$finished_cb->();
+    });
+}
+
+sub inventory {
+    my $self = shift;
+    my %params = @_;
+
+    return if $self->check_error($params{'inventory_cb'});
+
+    my @slots = $self->_all_slots();
+
+    my @inventory;
+    for my $slot (@slots) {
+	my $s = { slot => $slot, empty => 0 };
+	$s->{'reserved'} = $self->_is_slot_in_use($slot);
+	$s->{'label'} = $self->_get_slot_label($slot);
+	push @inventory, $s;
+    }
+
+    $params{'inventory_cb'}->(undef, \@inventory);
 }
 
 sub _load_by_slot {
     my $self = shift;
     my %params = @_;
-    my $slot = $params{'slot'};
     my $drive;
+    my $slot;
 
-    if ($slot eq "current") {
-        $slot = $self->_get_current();
-    } elsif ($slot eq "next") {
-        $slot = $self->_get_current();
-        $slot = $self->_get_next($slot);
+    if (exists $params{'relative_slot'}) {
+	if ($params{'relative_slot'} eq "current") {
+	    $slot = $self->_get_current();
+	} elsif ($params{'relative_slot'} eq "next") {
+	    if (exists $params{'slot'}) {
+		$slot = $params{'slot'};
+	    } else {
+		$slot = $self->_get_current();
+	    }
+	    $slot = $self->_get_next($slot);
+	} else {
+	    return $self->make_error("failed", $params{'res_cb'},
+		reason => "invalid",
+		message => "Invalid relative slot '$params{relative_slot}'");
+	}
+    } else {
+	$slot = $params{'slot'};
+    }
+
+    if (exists $params{'except_slots'} and exists $params{'except_slots'}->{$slot}) {
+	return $self->make_error("failed", $params{'res_cb'},
+	    reason => "notfound",
+	    message => "all slots have been loaded");
     }
 
     if (!$self->_slot_exists($slot)) {
@@ -161,6 +214,7 @@ sub _load_by_slot {
     if ($drive = $self->_is_slot_in_use($slot)) {
 	return $self->make_error("failed", $params{'res_cb'},
 	    reason => "inuse",
+	    slot => $slot,
 	    message => "Slot $slot is already in use by drive '$drive'");
     }
 
@@ -168,9 +222,7 @@ sub _load_by_slot {
     $self->_load_drive($drive, $slot);
     $self->_set_current($slot) if ($params{'set_current'});
 
-    my $next_slot = $self->_get_next($slot);
-
-    $self->_make_res($params{'res_cb'}, $drive, $slot, $next_slot);
+    $self->_make_res($params{'res_cb'}, $drive, $slot);
 }
 
 sub _load_by_label {
@@ -198,14 +250,12 @@ sub _load_by_label {
     $self->_load_drive($drive, $slot);
     $self->_set_current($slot) if ($params{'set_current'});
 
-    my $next_slot = $self->_get_next($slot);
-
-    $self->_make_res($params{'res_cb'}, $drive, $slot, $next_slot);
+    $self->_make_res($params{'res_cb'}, $drive, $slot);
 }
 
 sub _make_res {
     my $self = shift;
-    my ($res_cb, $drive, $slot, $next_slot) = @_;
+    my ($res_cb, $drive, $slot) = @_;
     my $res;
 
     my $device = Amanda::Device->new("file:$drive");
@@ -221,7 +271,7 @@ sub _make_res {
 		message => $err);
     }
 
-    $res = Amanda::Changer::disk::Reservation->new($self, $device, $drive, $slot, $next_slot);
+    $res = Amanda::Changer::disk::Reservation->new($self, $device, $drive, $slot);
     $res_cb->(undef, $res);
 }
 
@@ -298,6 +348,18 @@ sub _is_slot_in_use {
     return 0;
 }
 
+sub _get_slot_label {
+    my ($self, $slot) = @_;
+    my $dir = _quote_glob($self->{'dir'});
+
+    for my $symlink (bsd_glob("$dir/slot$slot/00000.*")) {
+	my ($label) = ($symlink =~ qr{\/00000\.([^/]*)$});
+	return $label;
+    }
+
+    return ''; # known, but blank
+}
+
 # Internal function to point a drive to a slot
 sub _load_drive {
     my ($self, $drive, $slot) = @_;
@@ -352,10 +414,16 @@ sub _get_next {
     return $all_slots[0];
 }
 
-# Get the 'current' slot, represented as a symlink named 'current'
+# Get the 'current' slot, represented as a symlink named 'data'
 sub _get_current {
     my ($self) = @_;
-    my $curlink = $self->{'dir'} . "/current";
+    my $curlink = $self->{'dir'} . "/data";
+
+    # for 2.6.1-compatibility, also parse a "current" symlink
+    my $oldlink = $self->{'dir'} . "/current";
+    if (-l $oldlink and ! -e $curlink) {
+	rename($oldlink, $curlink);
+    }
 
     if (-l $curlink) {
         my $target = readlink($curlink);
@@ -373,7 +441,7 @@ sub _get_current {
 # Set the 'current' slot
 sub _set_current {
     my ($self, $slot) = @_;
-    my $curlink = $self->{'dir'} . "/current";
+    my $curlink = $self->{'dir'} . "/data";
 
     if (-e $curlink) {
         unlink($curlink)
@@ -397,7 +465,7 @@ use vars qw( @ISA );
 
 sub new {
     my $class = shift;
-    my ($chg, $device, $drive, $slot, $next_slot) = @_;
+    my ($chg, $device, $drive, $slot) = @_;
     my $self = Amanda::Changer::Reservation::new($class);
 
     $self->{'chg'} = $chg;
@@ -405,7 +473,6 @@ sub new {
 
     $self->{'device'} = $device;
     $self->{'this_slot'} = $slot;
-    $self->{'next_slot'} = $next_slot;
 
     return $self;
 }
@@ -415,10 +482,15 @@ sub do_release {
     my %params = @_;
     my $drive = $self->{'drive'};
 
+    # no statefile locking required here, since this is just removing
+    # resources to which we have exclusive license at the moment
     unlink("$drive/data")
 	or warn("Could not unlink '$drive/data': $!");
     rmdir("$drive")
 	or warn("Could not rmdir '$drive': $!");
+
+    # unref the device, for good measure
+    $self->{'device'} = undef;
 
     $params{'finished_cb'}->(undef) if $params{'finished_cb'};
 }

@@ -35,7 +35,6 @@
 #include "tapefile.h"
 #include "logfile.h"
 #include "clock.h"
-#include "version.h"
 #include "holding.h"
 #include "driverio.h"
 #include "server_util.h"
@@ -90,7 +89,7 @@ main(
     char *tpchanger;
     char *qdisk, *qhname;
     GSList *datestamp_list = NULL;
-    config_overwrites_t *cfg_ovr;
+    config_overrides_t *cfg_ovr;
     char **config_options;
 
     /*
@@ -119,7 +118,7 @@ main(
 
     /* process arguments */
 
-    cfg_ovr = new_config_overwrites(argc/2);
+    cfg_ovr = new_config_overrides(argc/2);
     while((opt = getopt(argc, argv, "bfso:D:")) != EOF) {
 	switch(opt) {
 	case 'b': batch = 1;
@@ -128,7 +127,7 @@ main(
 		  break;
 	case 's': redirect = 0;
 		  break;
-	case 'o': add_config_overwrite_opt(cfg_ovr, optarg);
+	case 'o': add_config_override_opt(cfg_ovr, optarg);
 		  break;
 	case 'D': if (datearg == NULL)
 		      datearg = alloc(21*SIZEOF(char *));
@@ -149,13 +148,13 @@ main(
     }
 
     if(argc < 1) {
-	error(_("Usage: amflush%s [-b] [-f] [-s] [-D date]* [-o configoption]* <confdir> [host [disk]* ]*"), versionsuffix());
+	error(_("Usage: amflush [-b] [-f] [-s] [-D date]* [-o configoption]* <confdir> [host [disk]* ]*"));
 	/*NOTREACHED*/
     }
 
     config_init(CONFIG_INIT_EXPLICIT_NAME,
 		argv[0]);
-    apply_config_overwrites(cfg_ovr);
+    apply_config_overrides(cfg_ovr);
 
     conf_diskfile = config_dir_relative(getconf_str(CNF_DISKFILE));
     read_diskfile(conf_diskfile, &diskq);
@@ -208,12 +207,9 @@ main(
     amfree(conf_logfile);
 
     log_add(L_INFO, "%s pid %ld", get_pname(), (long)getpid());
-    driver_program = vstralloc(amlibexecdir, "/", "driver", versionsuffix(),
-			       NULL);
-    reporter_program = vstralloc(sbindir, "/", "amreport", versionsuffix(),
-				 NULL);
-    logroll_program = vstralloc(amlibexecdir, "/", "amlogroll", versionsuffix(),
-				NULL);
+    driver_program = vstralloc(amlibexecdir, "/", "driver", NULL);
+    reporter_program = vstralloc(sbindir, "/", "amreport", NULL);
+    logroll_program = vstralloc(amlibexecdir, "/", "amlogroll", NULL);
 
     tapedev = getconf_str(CNF_TAPEDEV);
     tpchanger = getconf_str(CNF_TPCHANGER);

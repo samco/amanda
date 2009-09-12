@@ -14,19 +14,26 @@ AM_LDFLAGS = $(AMANDA_STATIC_LDFLAGS)
 
 sbin_PROGRAMS =
 
-CHECK_PERL = \
+SCRIPTS_PERL = \
 	amdevcheck \
 	amtapetype
-SCRIPTS_PERL = $(CHECK_PERL)
 sbin_SCRIPTS = $(SCRIPTS_PERL)
 
 ## libamdevice.la
 
 amlib_LTLIBRARIES = 	libamdevice.la
 libamdevice_la_LDFLAGS = -release $(VERSION) 
-libamdevice_la_SOURCES = property.c device.c device-queueing.c \
-	null-device.c rait-device.c vfs-device.c \
-	xfer-source-device.c xfer-dest-device.c xfer-dest-taper.c
+libamdevice_la_SOURCES = \
+	property.c \
+	device.c \
+	device-queueing.c \
+	null-device.c \
+	rait-device.c \
+	vfs-device.c \
+	xfer-source-device.c \
+	xfer-dest-device.c \
+	xfer-dest-taper.c \
+	xfer-source-taper.c
 libamdevice_la_LIBADD = \
 	../common-src/libamanda.la \
 	../xfer-src/libamxfer.la
@@ -59,6 +66,9 @@ endif
 
 if WANT_DVDRW_DEVICE
 libamdevice_la_SOURCES += dvdrw-device.c
+
+if WANT_NDMP_DEVICE
+libamdevice_la_SOURCES += ndmp-device.c
 endif
 
 ## automake-style tests

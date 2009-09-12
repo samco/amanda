@@ -26,7 +26,7 @@ use vars qw( @ISA );
 use File::Glob qw( :glob );
 use File::Path;
 use Amanda::Config qw( :getconf );
-use Amanda::Debug;
+use Amanda::Debug qw( debug warning );
 use Amanda::Util qw( :alternates );
 use Amanda::Changer;
 use Amanda::MainLoop;
@@ -81,11 +81,30 @@ sub new {
     return $self;
 }
 
+# private method to help handle slot input
+sub _kid_slots_ok {
+    my ($self, $res_cb, $slot, $kid_slots_ref, $err_ref) = @_;
+    @{$kid_slots_ref} = expand_braced_alternates($slot);
+    return 1 if (@{$kid_slots_ref} == $self->{'num_children'});
+
+    if (@{$kid_slots_ref} == 1) {
+        @{$kid_slots_ref} = ( $slot ) x $self->{'num_children'};
+        return 1;
+    }
+    ${$err_ref} = $self->make_error("failed", $res_cb,
+                                    reason => "invalid",
+                                    message => "slot string '$slot' does not specify " .
+                                    "$self->{num_children} child slots");
+    return 0;
+}
+
 sub load {
     my $self = shift;
     my %params = @_;
 
     return if $self->check_error($params{'res_cb'});
+
+    $self->validate_params('load', \%params);
 
     my $release_on_error = sub {
 	my ($kid_results) = @_;
@@ -144,62 +163,73 @@ sub load {
 	}
     };
 
+    # make a template for params for the children
+    my %kid_template = %params;
+    delete $kid_template{'res_cb'};
+    delete $kid_template{'slot'};
+    delete $kid_template{'except_slots'};
+    # $kid_template{'label'} is passed directly to children
+    # $kid_template{'relative_slot'} is passed directly to children
+    # $kid_template{'mode'} is passed directly to children
+
+    # and make a copy for each child
+    my @kid_params;
+    for (0 .. $self->{'num_children'}-1) {
+	push @kid_params, { %kid_template };
+    }
+
     if (exists $params{'slot'}) {
 	my $slot = $params{'slot'};
 
 	# calculate the slots for each child
-	my @kid_slots;
-	if ($slot eq "current" or $slot eq "next") {
-	    @kid_slots = ( $slot ) x $self->{'num_children'};
-	} else {
-	    @kid_slots = expand_braced_alternates($slot);
-	    if (@kid_slots != $self->{'num_children'}) {
-		# as a convenience, expand a single slot into the same slot for each child
-		if (@kid_slots == 1) {
-		    @kid_slots = ( $kid_slots[0] ) x $self->{'num_children'};
-		} else {
-		    return $self->make_error("failed", $params{'res_cb'},
-			    reason => "invalid",
-			    message => "slot '$slot' does not specify " .
-					"$self->{num_children} child slots");
-		}
+	my (@kid_slots, $err);
+        return $err unless $self->_kid_slots_ok($params{'res_cb'}, $slot, \@kid_slots, \$err);
+	if (@kid_slots != $self->{'num_children'}) {
+	    # as a convenience, expand a single slot into the same slot for each child
+	    if (@kid_slots == 1) {
+		@kid_slots = ( $slot ) x $self->{'num_children'};
+	    } else {
+		return $self->make_error("failed", $params{'res_cb'},
+			reason => "invalid",
+			message => "slot '$slot' does not specify " .
+				    "$self->{num_children} child slots");
 	    }
 	}
-
-	$self->_for_each_child(
-	    oksub => sub {
-		my ($kid_chg, $kid_cb, $kid_slot) = @_;
-		my %kid_params = %params;
-		$kid_params{'slot'} = $kid_slot;
-		$kid_params{'res_cb'} = $kid_cb;
-		$kid_chg->load(%kid_params);
-	    },
-	    errsub => sub {
-		my ($kid_chg, $kid_cb, $kid_slot) = @_;
-		$kid_cb->(undef, "ERROR");
-	    },
-	    parent_cb => $all_kids_done_cb,
-	    args => \@kid_slots,
-	);
-    } elsif (exists $params{'label'}) {
-	$self->_for_each_child(
-	    oksub => sub {
-		my ($kid_chg, $kid_cb) = @_;
-		my %kid_params = %params;
-		$kid_params{'res_cb'} = $kid_cb;
-		$kid_chg->load(%kid_params);
-	    },
-	    errsub => sub {
-		my ($kid_chg, $kid_cb, $kid_slot) = @_;
-		$kid_cb->(undef, "ERROR");
-	    },
-	    parent_cb => $all_kids_done_cb,
-	);
-    } else {
-	return $self->make_error("failed", $params{'res_cb'},
-		reason => "invalid",
-		message => "Invalid parameters to 'load'");
+	for (0 .. $self->{'num_children'}-1) {
+	    $kid_params[$_]->{'slot'} = $kid_slots[$_];
+	}
     }
+
+    # each slot in except_slots needs to get broken down, and the appropriate slot
+    # given to each child
+    if (exists $params{'except_slots'}) {
+	for (0 .. $self->{'num_children'}-1) {
+	    $kid_params[$_]->{'except_slots'} = {};
+	}
+
+	# for each slot, split it up, then apportion the result to each child
+	for my $slot ( keys %{$params{'except_slots'}} ) {
+	    my (@kid_slots, $err);
+            return $err unless $self->_kid_slots_ok($params{'res_cb'}, $slot, \@kid_slots, \$err);
+	    for (0 .. $self->{'num_children'}-1) {
+		$kid_params[$_]->{'except_slots'}->{$kid_slots[$_]} = 1;
+	    }
+	}
+    }
+
+    $self->_for_each_child(
+	oksub => sub {
+	    my ($kid_chg, $kid_cb, $kid_params) = @_;
+	    $kid_params->{'res_cb'} = $kid_cb;
+	    $kid_chg->load(%$kid_params);
+	},
+	errsub => sub {
+	    my ($kid_chg, $kid_cb, $kid_slot) = @_;
+	    $kid_cb->(undef, "ERROR");
+	},
+	parent_cb => $all_kids_done_cb,
+	args => \@kid_params,
+    );
 }
 
 sub _make_res {
@@ -237,14 +267,24 @@ sub info_key {
 	if (grep { defined($_->[0]) } @$kid_results) {
 	    # we have errors, so collect them and make a "combined" error.
 	    my @annotated_errs;
+	    my @err_slots;
 	    for my $i (0 .. $self->{'num_children'}-1) {
 		my $kr = $kid_results->[$i];
 		next unless defined($kr->[0]);
 		push @annotated_errs,
 		    [ $self->{'child_names'}[$i], $kr->[0] ];
+		push @err_slots, $kr->[0]->{'slot'}
+		    if (defined $kr->[0] and defined $kr->[0]->{'slot'});
 	    }
+
+	    my @slotarg;
+	    if (@err_slots == $self->{'num_children'}) {
+		@slotarg = (slot => collapse_braced_alternates([@err_slots]));
+	    }
+
 	    $self->make_combined_error(
-		$params{'info_cb'}, [ @annotated_errs ]);
+		$params{'info_cb'}, [ @annotated_errs ],
+		@slotarg);
 	    return 1;
 	}
     };
@@ -375,10 +415,56 @@ sub _mk_simple_op {
     };
 }
 
-*reset = _mk_simple_op("reset");
-*update = _mk_simple_op("update");
-*clean = _mk_simple_op("clean");
-*eject = _mk_simple_op("eject");
+{
+    # perl doesn't like that these symbols are only mentioned once
+    no warnings;
+
+    *reset = _mk_simple_op("reset");
+    *update = _mk_simple_op("update");
+    *clean = _mk_simple_op("clean");
+    *eject = _mk_simple_op("eject");
+}
+
+sub inventory {
+    my $self = shift;
+    my %params = @_;
+
+    return if $self->check_error($params{'inventory_cb'});
+
+    my $all_kids_done_cb = sub {
+	my ($kid_results) = @_;
+	if (grep { defined($_->[0]) } @$kid_results) {
+	    # we have errors, so collect them and make a "combined" error.
+	    my @annotated_errs;
+	    for my $i (0 .. $self->{'num_children'}-1) {
+		my $kr = $kid_results->[$i];
+		next unless defined($kr->[0]);
+		push @annotated_errs,
+		    [ $self->{'child_names'}[$i], $kr->[0] ];
+	    }
+	    return $self->make_combined_error(
+		$params{'inventory_cb'}, [ @annotated_errs ]);
+	}
+
+	my $inv = $self->_merge_inventories($kid_results);
+	if (!defined $inv) {
+	    return $self->make_error("failed", $params{'inventory_cb'},
+		    reason => "notimpl",
+		    message => "could not generate consistent inventory from rait child changers");
+	}
+
+	$params{'inventory_cb'}->(undef, $inv);
+    };
+
+    $self->_for_each_child(
+	oksub => sub {
+	    my ($kid_chg, $kid_cb) = @_;
+	    $kid_chg->inventory(inventory_cb => $kid_cb);
+	},
+	errsub => undef,
+	parent_cb => $all_kids_done_cb,
+    );
+}
 
 # Takes keyword parameters 'oksub', 'errsub', 'parent_cb', and 'args'.  For
 # each child, runs $oksub (or, if the child is "ERROR", $errsub), passing it
@@ -432,6 +518,91 @@ sub _for_each_child {
     }
 }
 
+sub _merge_inventories {
+    my $self = shift;
+    my ($kid_results) = @_;
+
+    my @combined;
+    for my $kid_result (@$kid_results) {
+	my $kid_inv = $kid_result->[1];
+
+	if (!@combined) {
+	    for my $x (@$kid_inv) {
+		push @combined, {
+		    label => undef, barcode => [],
+		    empty => 0, reserved => 0, slot => [],
+		    import_export => 1, loaded_in => [],
+		};
+	    }
+	}
+
+	# if the results have different lengths, then we'll just call it
+	# not implemented; otherwise, we assume that the order of the slots
+	# in each child changer is the same.
+	if (scalar @combined != scalar @$kid_inv) {
+	    warning("child changers returned different-length inventories; cannot merge");
+	    return undef;
+	}
+
+	my $i;
+	for ($i = 0; $i < @combined; $i++) {
+	    my $c = $combined[$i];
+	    my $k = $kid_inv->[$i];
+
+	    # mismatches here are just warnings
+	    if (defined $c->{'label'}) {
+		if (defined $k->{'label'} and $c->{'label'} ne $k->{'label'}) {
+		    warning("child changers have different labels in slot at index $i");
+		    $c->{'label_mismatch'} = 1;
+		    $c->{'label'} = undef;
+		}
+	    } else {
+		if (!$c->{'label_mismatch'}) {
+		    $c->{'label'} = $k->{'label'};
+		}
+	    }
+
+	    # a slot is empty if any of the child slots are empty
+	    $c->{'empty'} = $c->{'empty'} || $k->{'empty'};
+
+	    # a slot is reserved if any of the child slots are reserved
+	    $c->{'reserved'} = $c->{'reserved'} || $k->{'reserved'};
+
+	    # a slot is import-export if all of the child slots are import_export
+	    $c->{'import_export'} = $c->{'import_export'} && $k->{'import_export'};
+
+	    # barcodes, slots, and loaded_in are lists
+	    push @{$c->{'slot'}}, $k->{'slot'};
+	    push @{$c->{'barcode'}}, $k->{'barcode'};
+	    push @{$c->{'loaded_in'}}, $k->{'loaded_in'};
+	}
+    }
+
+    # now post-process the slots, barcodes, and loaded_in into braced-alternates notation
+    my $i;
+    for ($i = 0; $i < @combined; $i++) {
+	my $c = $combined[$i];
+
+	delete $c->{'label_mismatch'} if $c->{'label_mismatch'};
+
+	$c->{'slot'} = collapse_braced_alternates([ @{$c->{'slot'}} ]);
+
+	if (grep { !defined $_ } @{$c->{'barcode'}}) {
+	    delete $c->{'barcode'};
+	} else {
+	    $c->{'barcode'} = collapse_braced_alternates([ @{$c->{'barcode'}} ]);
+	}
+
+	if (grep { !defined $_ } @{$c->{'loaded_in'}}) {
+	    delete $c->{'loaded_in'};
+	} else {
+	    $c->{'loaded_in'} = collapse_braced_alternates([ @{$c->{'loaded_in'}} ]);
+	}
+    }
+
+    return [ @combined ];
+}
+
 package Amanda::Changer::rait::Reservation;
 
 use Amanda::Util qw( :alternates );
@@ -460,8 +631,6 @@ sub new {
     my @slot_names;
     @slot_names = errmap { $_->{'this_slot'} } @$child_reservations;
     $self->{'this_slot'} = collapse_braced_alternates(\@slot_names);
-    @slot_names = errmap { $_->{'next_slot'} } @$child_reservations;
-    $self->{'next_slot'} = collapse_braced_alternates(\@slot_names);
 
     return $self;
 }
@@ -481,6 +650,9 @@ sub do_release {
 	if (@outer_errors) {
 	    $errstr = join("; ", @outer_errors);
 	}
+
+	# unref the device, for good measure
+	$self->{'device'} = undef;
 
 	$params{'finished_cb'}->($errstr) if $params{'finished_cb'};
     };

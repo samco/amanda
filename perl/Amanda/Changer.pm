@@ -23,7 +23,10 @@ package Amanda::Changer;
 
 use strict;
 use warnings;
+use Carp;
 use POSIX ();
+use Fcntl qw( O_RDWR O_CREAT LOCK_EX LOCK_NB );
+use Data::Dumper;
 use vars qw( @ISA );
 
 use Amanda::Paths;
@@ -57,10 +60,6 @@ Amanda::Changer -- interface to changer scripts
 
     # later..
     $reservation->release(finished_cb => $start_next_volume);
-
-=head1 API STATUS
-
-This interface will change before the next release.
 
 =head1 INTERFACE
 
@@ -163,17 +162,23 @@ undetected typos:
 Other reasons may be added in the future, so a caller should check for the
 reasons it expects, and treat any other failures as of unknown cause.
 
+When the desired slot cannot be loaded because it is already in use, the
+C<inuse> error comes with an extra parameter, C<slot>, giving the slot in
+question.  This parameter is not defined for other cases, such as no available
+drives.
+
 =head2 CURRENT SLOT
 
-Changers maintain a global concept of a "current" slot, for
-compatibility with Amanda algorithms such as the taperscan.  However, it
-is not compatible with concurrent use of the same changer, and may be
-inefficient for some changers, so new algorithms should avoid using it,
-preferring instead to load the correct tape immediately (with C<load>),
-and to progress from tape to tape using the reservation objects'
-C<next_slot> attribute.
+Changers maintain a global concept of a "current" slot, for compatibility with
+Amanda algorithms such as the taperscan.  However, it is not compatible with
+concurrent use of the same changer, and may be inefficient for some changers,
+so new algorithms should avoid using it, preferring instead to load the correct
+tape immediately (with C<load>), and to progress from tape to tape using the
+C<relative_slot> parameter to C<load>.
 
 =head2 CHANGER OBJECTS
+
+=head3 load
 
 The most common operation with a tape changer is to load a volume.  The C<load>
 method is heavily overloaded to support a number of different ways to specify a
@@ -183,39 +188,69 @@ In general, the method takes a C<res_cb> giving a callback that will receive
 the reservation.  If set_current is specified and true, then the changer's
 current slot should be updated to correspond to C<$slot>. If not, then the changer
 should not update its current slot (but some changers will anyway -
-specifically, chg-compat).  The C<mode> describes the intended use of the
-volume by the caller, and should be one of C<"read"> (the default) or
-C<"write">.  Changers managing WORM media may use this parameter to provide a
-fresh volume for writing, but to search for already-written volumes when
-reading.
+specifically, chg-compat).
 
-=head3 $chg->load(res_cb => $cb, label => $label, mode => $mode, set_current => $sc)
+The optional C<mode> describes the intended use of the volume by the caller,
+and should be one of C<"read"> (the default) or C<"write">.  Changers managing
+WORM media may use this parameter to provide a fresh volume for writing, but to
+search for already-written volumes when reading.
 
-Load a volume with the given label. This may leverage any barcodes or other
-indices that the changer has created, or may resort to a sequential scan of
-media.
+The load method has a number of permutations:
+
+  $chg->load(res_cb => $cb,
+	     label => $label,
+	     mode => $mode,
+	     set_current => $sc)
+
+Load and reserve a volume with the given label. This may leverage any barcodes
+or other indices that the changer has available.
 
 Note that the changer I<tries> to load the requested volume, but it's a mean
 world out there, and you may not get what you want, so check the label on the
 loaded volume before getting started.
 
-=head3 $chg->load(res_cb => $cb, slot => "current", mode => $mode)
+  $chg->load(res_cb => $cb,
+	     slot => $slot,
+	     mode => $mode,
+	     set_current => $sc)
 
-Reserve the volume in the "current" slot. This is used by the sequential
+Load and reserve the volume in the given slot. C<$slot> is a string specifying the slot
+to load, provided by the user or from some other invocation of this changer.
+Note that slots are not necessarily numeric, so performing arithmetic on this
+value is an error.
+
+If the slot does not exist, C<res_cb> will be called with a C<notfound> error.
+Empty slots are considered empty.
+
+  $chg->load(res_cb => $cb,
+	     relative_slot => "current",
+	     mode => $mode)
+
+Reserve the volume in the "current" slot. This is used by the traditional
 taperscan algorithm to begin its search.
 
-=head3 $chg->load(res_cb => $cb, slot => "next", mode => $mode, set_current => $sc)
+  $chg->load(res_cb => $cb,
+	     relative_slot => "next",
+	     slot => $slot,
+	     except_slots => { %except_slots },
+	     mode => $mode,
+	     set_current => $sc)
 
-Reserve the volume that follows the current slot.  This may not be a
-very efficient operation on all devices.
+Reserve the volume that follows the given slot or, if C<slot> is omitted, the
+volume that follows the current slot.  This will skip empty slots as if they
+were not present in the changer.
 
-=head3 $chg->load(res_cb => $cb, slot => $slot, mode => $mode, set_current => $sc)
+The optional C<except_slots> argument specifies a hash of slots that should
+I<not> be loaded.  Keys are slot names, and the hash values are ignored.  This
+is useful as a termination condition when scanning all of the slots in a
+changer: keep a hash of all slots already loaded, and pass that hash in
+C<except_slots>.  When the load operation returns a C<notfound> error, the scan
+is complete.
 
-Reserve the volume in the given slot. $slot must be a string that appeared in a
-reservation's 'next_slot' field at some point, or a string from the user (e.g.,
-an argument to amtape).
+=head3 info
 
-=head3 $chg->info(info_cb => $cb, info => [ $key1, $key2, .. ])
+  $chg->info(info_cb => $cb,
+	     info => [ $key1, $key2, .. ])
 
 Query the changer for miscellaneous information.  Any number of keys may be
 specified.  The C<info_cb> is called with C<$error> as the first argument,
@@ -253,36 +288,109 @@ searches.
 
 =back
 
-=head3 $chg->reset(finished_cb => $cb)
+=head3 reset
+
+  $chg->reset(finished_cb => $cb)
 
 Reset the changer to a "base" state. This will generally reset the "current"
 slot to something the user would think of as the "first" tape, unload any
 loaded drives, etc. It is an error to call this while any reservations are
 outstanding.
 
-=head3 $chg->clean(finished_cb => $cb, drive => $drivename)
+=head3 clean
 
-Clean a drive, if the changer supports it. Drivename can be an empty string for
-devices with only one drive, or can be an arbitrary string from the user (e.g.,
-an amtape argument). Note that some changers cannot detect the completion of a
+  $chg->clean(finished_cb => $cb,
+	      drive => $drivename)
+
+Clean a drive, if the changer supports it. Drivename can be omitted for devices
+with only one drive, or can be an arbitrary string from the user (e.g., an
+amtape argument). Note that some changers cannot detect the completion of a
 cleaning cycle; in this case, the user will just need to delay further Amanda
 activities until the cleaning is complete.
 
-=head3 $chg->eject(finished_cb => $cb, drive => $drivename)
+=head3 eject
+
+  $chg->eject(finished_cb => $cb,
+	      drive => $drivename)
 
 Eject the volume in a drive, if the changer supports it.  Drivename is as
 specified to C<clean>.  If possible, applications should prefer to eject a
 reserved volume when finished with it (C<< $res->release(eject => 1) >>), to
 ensure that the correct volume is ejected from a multi-drive changer.
 
-=head3 $chg->update(finished_cb => $cb, changed => $changed)
+=head3 update
 
-The user has changed something -- loading or unloading tapes,
-reconfiguring the changer, etc. -- that may have invalidated the
-database.  C<$changed> is a changer-specific string indicating what has
-changed; if it is omitted, the changer will check everything.
+  $chg->update(finished_cb => $cb,
+	       user_msg_fn => $fn,
+	       changed => $changed)
 
-=head3 $chg->move(finished_cb => $cb, from_slot => $from, to_slot => $to)
+The user has changed something -- loading or unloading tapes, reconfiguring the
+changer, etc. -- that may have invalidated the database.  C<$changed> is a
+changer-specific string indicating what has changed; if it is omitted, the
+changer will check everything.
+
+Since updates can take a long time, and users often want to know what's going
+on, the update method will call C<user_msg_fn>, if specified, with
+user-oriented messages appropriate to the changer.
+
+=head3 inventory
+
+  $chg->inventory(inventory_cb => $cb)
+
+The C<inventory_cb> is called with an error object as the first parameter, or
+C<undef> if no error occurs.  The second parameter is an arrayref containing an
+ordered list of information about the slots in the changer.  The order will
+make some sense to the user, but may change from one invocation to another.
+Note that not all changers support the C<inventory> method, and those that do
+not will return a C<'notimpl'> failure.
+
+Each slot is represented by a hash with the following keys:
+
+=over 4
+
+=item slot
+
+The slot name
+
+=item empty
+
+Set to C<1> if the slot is empty -- meaning no media is available in the slot.
+A blank or erased volume is not the same as an empty slot.
+
+=item label
+
+The label on the volume in this slot, or undef if the label is unknown.  If the
+volume is known to be blank, then this field should contain an empty string.
+
+=item barcode (optional)
+
+The barcode for the volume in this slot, if barcodes are available.
+
+=item reserved
+
+Set to C<1> if this slot is reserved, either by this process or another
+process.  This is only set for I<exclusive> reservations, meaning that loading
+the slot would result in an C<inuse> error.  Devices which can support
+concurrent access will never set this flag.
+
+=item loaded_in (optional)
+
+For changers which have distinct user-visible drives, this gives the drive
+currently accessing the volume in this slot.
+
+=item import_export (optional)
+
+Set to C<1> if this is an import-export slot -- a slot in which the user can
+easily add or remove volumes.  This information may be useful for operations to
+bulk-import newly-inserted tapes or bulk-export a set of tapes.
+
+=back
+
+=head3 move
+
+  $chg->move(finished_cb => $cb,
+	     from_slot => $from,
+	     to_slot => $to)
 
 Move a volume between two slots in the changer. These slots are provided by the
 user, and have meaning for the changer.
@@ -292,20 +400,13 @@ user, and have meaning for the changer.
 =head3 $res->{'device'}
 
 This is the fully configured device for the reserved volume.  The device is not
-started.  Note that this may, in some cases, be a null device -- for example,
-in the case of empty slots in a tape library.
+started.
 
 =head3 $res->{'this_slot'}
 
 This is the name of this slot.  It is an arbitrary string which will
 have some meaning to the changer's C<load()> method. It is safe to
 access this field after the reservation has been released.
-
-=head3 $res->{'next_slot'}
-
-This is the "next" slot after this one. It is safe to access this field,
-too, after the reservation has been released (and, in changers with only
-one "drive", this is the only way you will get to the next volume!)
 
 =head3 $res->release(finished_cb => $cb, eject => $eject)
 
@@ -351,6 +452,14 @@ Next, for each requested key, C<info> calls C<< $self->info_key($key, %params)
 all C<info_key> invocations to finish, then collect the results or errors that
 occur.
 
+=head2 PROPERTY PARSING
+
+Many properties are boolean, and Amanda has a habit of accepting a number of
+different ways of writing boolean values.  The method C<<
+$self->get_boolean_property($config, $prop, $default) >> will parse such a
+property, returning 0 or 1 if the property is specified, C<$default> if it is
+not specified, or C<undef> if the property cannot be parsed.
+
 =head2 ERROR HANDLING
 
 To create a new error object, use C<< $self->make_error($type, $cb, %args) >>.
@@ -387,6 +496,9 @@ appropriate type and reason for the combined error.
 	  [ "from the right", $right_err ] ]);
   }
 
+Any additional keyword arguments to C<make_combined_error> are put into the
+combined error; this is useful to set the C<slot> attribute.
+
 The method C<< $self->check_error($cb) >> is a useful method for subclasses to
 avoid doing anything after a fatal error.  This method checks C<<
 $self->{'fatal_error'} >>.  If the error is defined, the method calls C<$cb>
@@ -409,13 +521,13 @@ object is of type C<Amanda::Changer::Config>, and can be treated as a hashref
 with the following keys:
 
   name                  -- name of the changer section (or "default")
-  is_global             -- true if this changer is the default, global changer
+  is_global             -- true if this changer is the default changer
   tapedev               -- tapedev parameter
   tpchanger             -- tpchanger parameter
   changerdev            -- changerdev parameter
   changerfile           -- changerfile parameter
   properties            -- all properties for this changer
-  device_properties     -- all device properties for this changer
+  device_properties     -- device properties from this changer
 
 The four parameters are just as supplied by the user, either in the global
 config or in a changer section.  Changer authors are cautioned not to try to
@@ -438,26 +550,52 @@ property, ignoring its the priority and other attributes.  In a list context,
 it returns all values for the property; in a scalar context, it returns the
 first value specified.
 
+=head2 PERSISTENT STATE AND LOCKING
+
+Many changer subclasses need to track state across invocations and between
+different processes, and to ensure that the state is read and written
+atomically.  The C<with_locked_state> provides this functionality by
+locking a statefile, only unlocking it after any changes have been written back
+to it.  Subclasses can use this method both for mutual exclusion (ensuring that
+only one changer operation is in progress at any time) and for atomic state
+storage.
+
+The C<with_locked_state> method works like C<synchronized> (in
+L<Amanda::MainLoop>), but with some extra arguments:
+
+  $self->with_locked_state($filename, $some_cb, sub {
+    # note: $some_cb shadows outer $some_cb; see Amanda::MainLoop::synchronized
+    my ($state, $some_cb) = @_;
+    # ... and eventually:
+    $some_cb->(...);
+  });
+
+The callback C<$some_cb> is assumed to take a changer error as its first
+argument, and if there are any errors locking the statefile, they will be
+reported directly to this callback.  Otherwise, a wrapped version of
+C<$some_cb> is passed to the inner C<sub>.  When this wrapper is invoked, the
+state will be written to disk and unlocked before the original callback is
+invoked.
+
+The state itself begins as an empty hashref, but subclasses can add arbitrary
+keys to the hash.  Serialization is currently handled with L<Data::Dumper>.
+
+=head2 PARAMETER VALIDATION
+
+The C<validate_params> method is useful to make sure that the proper parameters
+are present for a particular method, dying if not.  Call it like this:
+
+  $self->validate_params("load", \%params);
+
+The method currently only supports the "load" method, but can be expanded to
+cover other methods.
+
 =head1 SEE ALSO
 
-See the other changer packages, including:
+The Amanda Wiki (http://wiki.zmanda.com) has a higher-level description of the
+changer model implemented by this package.
 
-=over 2
-
-=item L<Amanda::Changer::disk>
-
-=item L<Amanda::Changer::compat>
-
-=item L<Amanda::Changer::single>
-
-=back
-
-=head1 TODO
-
- - support loading by barcode, showing barcodes in reservations
- - support deadlock avoidance by returning more information in load errors
- - Amanda::Changer::Single
- - support import and export for robots with import/export slots
+See amanda-changers(7) for user-level documentation of the changer implementations.
 
 =cut
 
@@ -653,9 +791,10 @@ sub _stubop {
     return if $self->check_error($params{$cbname});
 
     my $class = ref($self);
-    $self->make_error("failed", $params{$cbname},
+    my $chg_foo = "chg-" . ($class =~ /Amanda::Changer::(.*)/)[0];
+    return $self->make_error("failed", $params{$cbname},
 	reason => "notimpl",
-	message => "$class does not support $op");
+	message => "'$chg_foo:' does not support $op");
 }
 
 sub load { _stubop("loading volumes", "res_cb", @_); }
@@ -663,6 +802,7 @@ sub reset { _stubop("reset", "finished_cb", @_); }
 sub clean { _stubop("clean", "finished_cb", @_); }
 sub eject { _stubop("eject", "finished_cb", @_); }
 sub update { _stubop("update", "finished_cb", @_); }
+sub inventory { _stubop("inventory", "inventory_cb", @_); }
 sub move { _stubop("move", "finished_cb", @_); }
 
 # info calls out to info_setup and info_key; see POD above
@@ -748,6 +888,21 @@ sub info {
 
 # subclass helpers
 
+sub get_boolean_property {
+    my ($self) = shift;
+    my ($config, $propname, $default) = @_;
+
+    return $default
+	unless (exists $config->{'properties'}->{$propname});
+
+    my $propinfo = $config->{'properties'}->{$propname};
+    return undef unless @{$propinfo->{'values'}} == 1;
+    my $propval = $propinfo->{'values'}->[0];
+    return 1 if ($propval =~ /^(1|y|yes|t|true|on)$/i);
+    return 0 if ($propval =~ /^(0|n|no|f|false|off)$/i);
+    return undef;
+}
+
 sub make_error {
     my $self = shift;
     my ($type, $cb, %args) = @_;
@@ -773,7 +928,7 @@ sub make_error {
 
 sub make_combined_error {
     my $self = shift;
-    my ($cb, $suberrors) = @_;
+    my ($cb, $suberrors, %extra_args) = @_;
     my $err;
 
     if (@$suberrors == 0) {
@@ -812,7 +967,7 @@ sub make_combined_error {
 	    map { sprintf("%s: %s", @$_) }
 	    @$suberrors);
 
-	my %errargs = ( message => $message );
+	my %errargs = ( message => $message, %extra_args );
 	$errargs{'reason'} = $reason unless ($fatal);
 	$err = Amanda::Changer::Error->new(
 	    $fatal? "fatal" : "failed",
@@ -839,9 +994,92 @@ sub check_error {
     }
 }
 
+sub lock_statefile {
+    my $self = shift;
+    my %params = @_;
+
+    my $statefile = $params{'statefile_filename'};
+    my $lock_cb = $params{'lock_cb'};
+    Amanda::Changer::StateFile->new($statefile, $lock_cb);
+}
+
+sub with_locked_state {
+    my $self = shift;
+    my ($statefile, $cb, $sub) = @_;
+    my %subs;
+    my ($filelock, $STATE);
+    my $poll = 0; # first delay will be 0.1s; see below
+
+    $subs{'open'} = sub {
+	$filelock = Amanda::Util::file_lock->new($statefile);
+
+	$subs{'lock'}->();
+    };
+
+    $subs{'lock'} = sub {
+	my $rv = $filelock->lock();
+	if ($rv == 1) {
+	    # loop until we get the lock, increasing $poll to 10s
+	    $poll += 100 unless $poll >= 10000;
+	    return Amanda::MainLoop::call_after($poll, $subs{'lock'});
+	}
+
+	$subs{'read'}->();
+    };
+
+    $subs{'read'} = sub {
+	my $contents = $filelock->data();
+	if ($contents) {
+	    eval $contents;
+	    if ($@) {
+		# $fh goes out of scope here, and is thus automatically
+		# unlocked
+		return $cb->("error reading '$statefile': $@", undef);
+	    }
+	    if (!defined $STATE or ref($STATE) ne 'HASH') {
+		return $cb->("'$statefile' did not define \$STATE properly", undef);
+	    }
+	} else {
+	    # initial state (blank file)
+	    $STATE = {};
+	}
+
+	$sub->($STATE, $subs{'cb_wrap'});
+    };
+
+    $subs{'cb_wrap'} =  sub {
+	my @args = @_;
+
+	my $dumper = Data::Dumper->new([ $STATE ], ["STATE"]);
+	$dumper->Purity(1);
+	$filelock->write($dumper->Dump);
+	$filelock->unlock();
+
+	# call through to the original callback with the original
+	# arguments
+	$cb->(@args);
+    };
+
+    $subs{'open'}->();
+}
+
+sub validate_params {
+    my ($self, $op, $params) = @_;
+
+    if ($op eq 'load') {
+        unless(exists $params->{'label'} || exists $params->{'slot'} ||
+               exists $params->{'relative_slot'}) {
+		confess "Invalid parameters to 'load'";
+        }
+    } else {
+        confess "don't know how to validate '$op'";
+    }
+}
+
 package Amanda::Changer::Error;
 use Amanda::Debug qw( :logging );
 use Carp qw( cluck );
+use Amanda::Debug;
 use overload
     '""' => sub { $_[0]->{'message'}; },
     'cmp' => sub { $_[0]->{'message'} cmp $_[1]; };
@@ -897,6 +1135,9 @@ sub notimpl { $_[0]->{'reason'} eq 'notimpl'; }
 sub inuse { $_[0]->{'reason'} eq 'inuse'; }
 sub unknown { $_[0]->{'reason'} eq 'unknown'; }
 
+# slot accessor
+sub slot { $_[0]->{'slot'}; }
+
 package Amanda::Changer::Reservation;
 # this is a simple base class with stub method or two.
 
@@ -911,12 +1152,8 @@ sub new {
 sub DESTROY {
     my ($self) = @_;
     if (!$self->{'released'}) {
-	$self->release(finished_cb => sub {
-	    my ($err) = @_;
-	    if (defined $err) {
-		warn "While releasing reservation: $err";
-	    }
-	});
+	Amanda::Debug::warning("Changer reservation for slot '$self->{this_slot}' has " .
+			       "gone out of scope without release");
     }
 }
 
@@ -981,15 +1218,9 @@ sub new {
 	$self->{'changerdev'} = getconf($CNF_CHANGERDEV);
 	$self->{'changerfile'} = getconf($CNF_CHANGERFILE);
 
-	# no changer properties for a global changer
+	# no changer or device properties, since there's no changer definition to use
 	$self->{'properties'} = {};
-
-	# note that this *intentionally* overwrites the implict properties with
-	# any explicit device_property parameters (rather than appending to the
-	# 'values' key)
-	my $implicit_properties = $self->_get_implicit_properties();
-	my $global_properties = getconf($CNF_DEVICE_PROPERTY);
-	$self->{'device_properties'} = { %$implicit_properties, %$global_properties };
+	$self->{'device_properties'} = {};
     }
     return $self;
 }
@@ -998,7 +1229,26 @@ sub configure_device {
     my $self = shift;
     my ($device) = @_;
 
-    while (my ($propname, $propinfo) = each(%{$self->{'device_properties'}})) {
+    # we'll accumulate properties in this hash *overwriting* previous properties
+    # instead of appending to them
+    my %properties;
+
+    # always use implicit properties
+    %properties = ( %properties, %{ $self->_get_implicit_properties() } );
+
+    # always use global properties
+    %properties = ( %properties, %{ getconf($CNF_DEVICE_PROPERTY) } );
+
+    # if this is a device alias, add properties from its device definition
+    if (my $dc = lookup_device_config($device->device_name)) {
+	%properties = ( %properties,
+		%{ device_config_getconf($dc, $DEVICE_CONFIG_DEVICE_PROPERTY); } );
+    }
+
+    # finally, add any props from the changer config
+    %properties = ( %properties, %{ $self->{'device_properties'} } );
+
+    while (my ($propname, $propinfo) = each(%properties)) {
 	for my $value (@{$propinfo->{'values'}}) {
 	    if (!$device->property_set($propname, $value)) {
 		my $msg = "Error setting '$propname' on device '".$device->device_name."'";
@@ -1061,6 +1311,7 @@ sub _get_implicit_properties {
 
     if (tapetype_seen($tapetype, $TAPETYPE_BLOCKSIZE)) {
 	$props->{'block_size'} = {
+	    optional => 0,
 	    priority => 0,
 	    append => 0,
 	    values => [

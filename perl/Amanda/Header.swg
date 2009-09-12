@@ -112,10 +112,15 @@ typedef struct {
 	void debug_dump(void) {
 	    dump_dumpfile_t(self);
 	}
+
+	%newobject summary;
+	char *summary(void) {
+	    return summarize_header(self);
+	}
     }
 } dumpfile_t;
 
-%newobject from_string;
+%newobject C_from_string;
 %inline %{
 dumpfile_t *C_from_string(const char *string) {
     dumpfile_t *result = g_new(dumpfile_t, 1);
@@ -139,4 +144,15 @@ sub from_string {
     shift; # ignore class
     return C_from_string(@_);
 }
+
+package Amanda::Header::Header;
+
+# point $hdr->matches_dumpspecs() to Amanda::Cmdline::header_matches_dumpspecs.  When
+# Amanda is built with --without-server, Amanda::Cmdline is missing, so this will fail.
+# Note that this assumes the user has already use'd Amanda::Cmdline.
+sub matches_dumpspecs {
+    Amanda::Cmdline::header_matches_dumpspecs(@_);
+}
+
+package Amanda::Header;
 %}

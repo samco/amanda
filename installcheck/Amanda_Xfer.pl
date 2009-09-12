@@ -16,7 +16,7 @@
 # Contact information: Zmanda Inc, 465 S Mathlida Ave, Suite 300
 # Sunnyvale, CA 94086, USA, or: http://www.zmanda.com
 
-use Test::More tests => 8;
+use Test::More tests => 10;
 use File::Path;
 use strict;
 
@@ -29,9 +29,11 @@ use Amanda::Debug;
 use Amanda::MainLoop;
 use Amanda::Paths;
 use Amanda::Config;
+use Amanda::Constants;
 
 # set up debugging so debug output doesn't interfere with test results
 Amanda::Debug::dbopen("installcheck");
+Installcheck::log_test_output();
 
 # and disable Debug's die() and warn() overrides
 Amanda::Debug::disable_die_override();
@@ -48,7 +50,7 @@ Amanda::Debug::disable_die_override();
     pass("Creating a transfer doesn't crash"); # hey, it's a start..
 
     my $got_msg = "(not received)";
-    $xfer->get_source()->set_callback(sub {
+    $xfer->start(sub {
 	my ($src, $msg, $xfer) = @_;
 	if ($msg->{type} == $XMSG_ERROR) {
 	    die $msg->{elt} . " failed: " . $msg->{message};
@@ -57,11 +59,9 @@ Amanda::Debug::disable_die_override();
 	    $got_msg = $msg->{message};
 	}
 	elsif ($xfer->get_status() == $Amanda::Xfer::XFER_DONE) {
-	    $src->remove();
 	    Amanda::MainLoop::quit();
 	}
     });
-    $xfer->start();
     Amanda::MainLoop::run();
     pass("A simple transfer runs to completion");
     is($got_msg, "Is this thing on?",
@@ -89,17 +89,12 @@ Amanda::Debug::disable_die_override();
 	}
 	if  ($xfer1->get_status() == $Amanda::Xfer::XFER_DONE
 	 and $xfer2->get_status() == $Amanda::Xfer::XFER_DONE) {
-	    $xfer1->get_source()->remove();
-	    $xfer2->get_source()->remove();
 	    Amanda::MainLoop::quit();
 	}
     };
 
-    $xfer1->get_source()->set_callback($cb);
-    $xfer2->get_source()->set_callback($cb);
-
-    $xfer1->start();
-    $xfer2->start();
+    $xfer1->start($cb);
+    $xfer2->start($cb);
 }
 # let the already-started transfers go out of scope before they 
 # complete, as a memory management test..
@@ -129,13 +124,11 @@ pass("Two simultaneous transfers run to completion");
 	    die $msg->{elt} . " failed: " . $msg->{message};
 	}
 	if ($xfer->get_status() == $Amanda::Xfer::XFER_DONE) {
-	    $xfer->get_source()->remove();
 	    Amanda::MainLoop::quit();
 	}
     };
 
-    $xfer->get_source()->set_callback($cb);
-    $xfer->start();
+    $xfer->start($cb);
 
     Amanda::MainLoop::run();
     pass("One 10-element transfer runs to completion");
@@ -171,13 +164,11 @@ pass("Two simultaneous transfers run to completion");
 	    die $msg->{elt} . " failed: " . $msg->{message};
 	}
 	if ($xfer->get_status() == $Amanda::Xfer::XFER_DONE) {
-	    $xfer->get_source()->remove();
 	    Amanda::MainLoop::quit();
 	}
     };
 
-    $xfer->get_source()->set_callback($cb);
-    $xfer->start();
+    $xfer->start($cb);
 
     Amanda::MainLoop::run();
 
@@ -215,17 +206,15 @@ pass("Two simultaneous transfers run to completion");
 	$src->remove();
 	$xfer->cancel();
     });
-    $xfer->get_source()->set_callback(sub {
+    $xfer->start(sub {
 	my ($src, $msg, $xfer) = @_;
 	if ($msg->{type} == $XMSG_ERROR) {
 	    die $msg->{elt} . " failed: " . $msg->{message};
 	}
 	if ($xfer->get_status() == $Amanda::Xfer::XFER_DONE) {
-	    $src->remove();
 	    Amanda::MainLoop::quit();
 	}
     });
-    $xfer->start();
     Amanda::MainLoop::run();
     ok($got_timeout, "A neverending transfer finishes after being cancelled");
     # (note that this does not test all of the cancellation possibilities)
@@ -248,10 +237,76 @@ pass("Two simultaneous transfers run to completion");
     ]);
 
     my $got_error = 0;
-    $xfer->get_source()->set_callback(sub {
+    $xfer->start(sub {
 	my ($src, $msg, $xfer) = @_;
 	if ($msg->{type} == $XMSG_ERROR) {
 	    $got_error = 1;
+	}
+	if ($xfer->get_status() == $Amanda::Xfer::XFER_DONE) {
+	    Amanda::MainLoop::quit();
+	}
+    });
+    Amanda::MainLoop::run();
+    ok($got_error, "A transfer with an error cancels itself after sending an error");
+
+    unlink($read_filename);
+}
+
+# test the Process filter
+{
+    my $RANDOM_SEED = 0xD00D;
+
+    my $xfer = Amanda::Xfer->new([
+	Amanda::Xfer::Source::Random->new(1024*1024, $RANDOM_SEED),
+	Amanda::Xfer::Filter::Process->new(
+	    [ $Amanda::Constants::COMPRESS_PATH, $Amanda::Constants::COMPRESS_BEST_OPT ], 0),
+	Amanda::Xfer::Filter::Process->new(
+	    [ $Amanda::Constants::UNCOMPRESS_PATH, $Amanda::Constants::UNCOMPRESS_OPT ], 0),
+	Amanda::Xfer::Dest::Null->new($RANDOM_SEED),
+    ]);
+
+    $xfer->get_source()->set_callback(sub {
+	my ($src, $msg, $xfer) = @_;
+	if ($msg->{type} == $XMSG_ERROR) {
+	    die $msg->{elt} . " failed: " . $msg->{message};
+	}
+	elsif ($xfer->get_status() == $Amanda::Xfer::XFER_DONE) {
+	    $src->remove();
+	    Amanda::MainLoop::quit();
+	}
+    });
+    $xfer->start();
+    Amanda::MainLoop::run();
+    pass("compress | uncompress gets back the original stream");
+}
+
+{
+    my $RANDOM_SEED = 0x5EAF00D;
+
+    # build a transfer that will keep going forever, using a source that
+    # cannot produce an EOF, so Filter::Process is forced to kill the
+    # compress process
+
+    open(my $zerofd, "<", "/dev/zero")
+	or die("could not open /dev/zero: $!");
+    my $xfer = Amanda::Xfer->new([
+	Amanda::Xfer::Source::Fd->new($zerofd),
+	Amanda::Xfer::Filter::Process->new(
+	    [ $Amanda::Constants::COMPRESS_PATH, $Amanda::Constants::COMPRESS_BEST_OPT ], 0),
+	Amanda::Xfer::Dest::Null->new(0),
+    ]);
+
+    my $got_timeout = 0;
+    Amanda::MainLoop::timeout_source(200)->set_callback(sub {
+	my ($src) = @_;
+	$got_timeout = 1;
+	$src->remove();
+	$xfer->cancel();
+    });
+    $xfer->get_source()->set_callback(sub {
+	my ($src, $msg, $xfer) = @_;
+	if ($msg->{type} == $XMSG_ERROR) {
+	    die $msg->{elt} . " failed: " . $msg->{message};
 	}
 	if ($xfer->get_status() == $Amanda::Xfer::XFER_DONE) {
 	    $src->remove();
@@ -260,7 +315,7 @@ pass("Two simultaneous transfers run to completion");
     });
     $xfer->start();
     Amanda::MainLoop::run();
-    ok($got_error, "A transfer with an error cancels itself after sending an error");
-
-    unlink($read_filename);
+    ok($got_timeout, "Amanda::Xfer::Filter::Process can be cancelled");
+    # (note that this does not test all of the cancellation possibilities)
 }
+

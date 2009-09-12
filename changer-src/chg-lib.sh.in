@@ -28,21 +28,12 @@ amlibexecdir="@amlibexecdir@"
 # Eponymous functions to access various amanda apps
 # TODO: move to amanda-sh-lib.sh
 
-if test "@USE_VERSION_SUFFIXES@" = "yes"; then
-    amgetconf() {
-        "${sbindir}/amgetconf-@VERSION@" "${@}"
-    }
-    amdevcheck() {
-        "${sbindir}/amdevcheck-@VERSION@" "${@}"
-    }
-else
-    amgetconf() {
-        "${sbindir}/amgetconf" "${@}"
-    }
-    amdevcheck() {
-        "${sbindir}/amdevcheck" "${@}"
-    }
-fi
+amgetconf() {
+    "${sbindir}/amgetconf" "${@}"
+}
+amdevcheck() {
+    "${sbindir}/amdevcheck" "${@}"
+}
 
 # This function tries to find a useable mt binary. If a fully-qualified path
 # was provided at configure time or via a config file, we check that it
@@ -108,7 +99,7 @@ amdevcheck_status() {
     test "$amdevcheck_status" -ne 0 && return 0
 
     # extract any messages
-    amdevcheck_message=`echo "$amdevcheck_output" | sed '/^MESSAGE /{s/^MESSAGE //;p;}; d'`
+    amdevcheck_message=`echo "$amdevcheck_output" | sed -n -e '/^MESSAGE /{' -e 's/^MESSAGE //' -e 'p' -e 'q' -e '}'`
 
     # Return 1 if it's possible that the device is offline or busy; if the device cannot
     # distinguish this state from an error condition, then our caller will just have to

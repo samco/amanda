@@ -228,7 +228,9 @@ Requires: readline
 Provides: amanda-backup_client = %{amanda_version}
 Provides: libamclient-%{version}.so = %{amanda_version}
 Provides: libamanda-%{version}.so = %{amanda_version}
-Conflicts: amanda-backup_server 
+Conflicts: amanda-backup_server
+# Native package names
+Obsoletes: amanda, amanda-client, amanda-server
 
 %package backup_server
 Summary: The Amanda Backup and Archiving Server
@@ -253,6 +255,8 @@ Provides: librestore-%{version}.so = %{amanda_version}
 Provides: libamtape-%{version}.so = %{amanda_version}
 Provides: libamdevice-%{version}.so = %{amanda_version}
 Conflicts: amanda-backup_client
+# Native package names
+Obsoletes: amanda, amanda-client, amanda-server
 # --- Package descriptions ---
 
 %description
@@ -390,7 +394,6 @@ fi
 
 make -s -j1 LIBTOOLFLAGS=--silent DESTDIR=%{buildroot} install
 
-rm -rf %{ROOT_DATADIR}/amanda
 rm -f %{ROOT_AMANDAHOMEDIR}/example/inetd.conf.amandaclient
 mkdir %{buildroot}/{etc,var/log}
 mkdir %{ROOT_LOCALSTATEDIR}/amanda 
@@ -1548,6 +1551,8 @@ echo "Amanda installation log can be found in '${INSTALL_LOG}' and errors (if an
 %doc %{AMANDAHOMEDIR}/example/amanda-client.conf
 %doc %{AMANDAHOMEDIR}/template.d/README
 %doc %{AMANDAHOMEDIR}/template.d/dumptypes
+%defattr(0644,root,root,0755)
+%doc %{DATADIR}/amanda
 
 %files backup_server
 %defattr(0755,%{amanda_user},%{amanda_group})
@@ -1560,6 +1565,8 @@ echo "Amanda installation log can be found in '${INSTALL_LOG}' and errors (if an
 %{LOCALSTATEDIR}/amanda
 %{SBINDIR}/am*
 %defattr(4750,root,disk)
+%{AMLIBEXECDIR}/application/amgtar
+%{AMLIBEXECDIR}/application/amstar
 %{AMLIBEXECDIR}/calcsize
 %{AMLIBEXECDIR}/killpgrp
 %{AMLIBEXECDIR}/rundump
@@ -1594,6 +1601,8 @@ echo "Amanda installation log can be found in '${INSTALL_LOG}' and errors (if an
 %doc %{AMANDAHOMEDIR}/amanda-release
 %docdir %{AMANDAHOMEDIR}/example
 %docdir %{AMANDAHOMEDIR}/template.d
+%defattr(0644,root,root,0755)
+%doc %{DATADIR}/amanda
 
 # --- ChangeLog
 

@@ -40,6 +40,7 @@
 #include "logfile.h"
 #include "cmdline.h"
 #include "server_util.h"
+#include <getopt.h>
 
 #define CREAT_MODE	0640
 
@@ -80,6 +81,9 @@ usage(void)
     g_fprintf(stderr, _("Goes and grabs a dump from tape, moving tapes around and assembling parts as\n"));
     g_fprintf(stderr, _("necessary.  Files are restored to the current directory, unless otherwise\nspecified.\n\n"));
     g_fprintf(stderr, _("  -p Pipe exactly *one* complete dumpfile to stdout, instead of to disk.\n"));
+    g_fprintf(stderr, _("  -h Output the amanda header to same output as the image.\n"));
+    g_fprintf(stderr, _("  --header-fd <fd> Output the amanda header to the numbered file descriptor.\n"));
+    g_fprintf(stderr, _("  --header-file <filename> Output the amanda header to the filename.\n"));
     g_fprintf(stderr, _("  -O <output dir> Restore files to this directory.\n"));
     g_fprintf(stderr, _("  -d <device> Force restoration from a particular tape device.\n"));
     g_fprintf(stderr, _("  -c Compress output, fastest method available.\n"));
@@ -286,6 +290,13 @@ list_needed_tapes(
  * files that match the command line criteria.
  */
 
+static int loptions = 0;
+static struct option long_options[] = {
+    {"header-fd"  , 1, &loptions, 1 },
+    {"header-file", 1, &loptions, 2 },
+    {NULL, 0, NULL, 0}
+};
+
 int
 main(
     int		argc,
@@ -299,9 +310,10 @@ main(
     char *e;
     rst_flags_t *rst_flags;
     int minimum_arguments;
-    config_overwrites_t *cfg_ovr = NULL;
+    config_overrides_t *cfg_ovr = NULL;
     disklist_t diskq;
     char * conf_diskfile = NULL;
+    am_feature_t *our_features = am_init_feature_set();
 
     /*
      * Configure program for internationalization:
@@ -311,16 +323,6 @@ main(
      */  
     setlocale(LC_MESSAGES, "C");
     textdomain("amanda"); 
-
-    for(fd = 3; fd < (int)FD_SETSIZE; fd++) {
-	/*
-	 * Make sure nobody spoofs us with a lot of extra open files
-	 * that would cause a successful open to get a very high file
-	 * descriptor, which in turn might be used as an index into
-	 * an array (e.g. an fd_set).
-	 */
-	close(fd);
-    }
 
     set_pname("amfetchdump");
 
@@ -336,9 +338,34 @@ main(
     rst_flags->wait_tape_prompt = 1;
 
     /* handle options */
-    cfg_ovr = new_config_overwrites(argc/2);
-    while( (opt = getopt(argc, argv, "alht:scCpb:nwi:d:O:o:")) != -1) {
+    cfg_ovr = new_config_overrides(argc/2);
+    while( (opt = getopt_long(argc, argv, "alht:scCpb:nwi:d:O:o:", long_options, NULL)) != -1) {
 	switch(opt) {
+	case 0:
+	    switch (loptions) {
+		case 1:
+		    rst_flags->headers = 1;
+		    if (strcmp(optarg, "-") == 0)
+			rst_flags->header_to_fd = STDOUT_FILENO;
+		    else
+			rst_flags->header_to_fd = atoi(optarg);
+		    if (fcntl(rst_flags->header_to_fd, F_GETFL, NULL) == -1) {
+			error(_("fd %d: %s\n"), rst_flags->header_to_fd,
+			      strerror(errno));
+		    }
+		    break;
+		case 2:
+		    rst_flags->headers = 1;
+		    rst_flags->header_to_fd = open(optarg,
+						 O_WRONLY | O_CREAT | O_TRUNC,
+						 S_IRUSR | S_IWUSR);
+		    if (rst_flags->header_to_fd == -1) {
+			error(_("Can't create '%s': %s\n"), optarg,
+			      strerror(errno));
+		    }
+		    break;
+	    }
+	    break;
 	case 'b':
             rst_flags->blocksize = (ssize_t)strtol(optarg, &e, 10);
             if(*e == 'k' || *e == 'K') {
@@ -369,10 +396,24 @@ main(
 	case 'w': rst_flags->delay_assemble = 1; break;
 	case 'a': rst_flags->wait_tape_prompt = 0; break;
 	case 'h': rst_flags->headers = 1; break;
-	case 'o': add_config_overwrite_opt(cfg_ovr, optarg); break;
+	case 'o': add_config_override_opt(cfg_ovr, optarg); break;
 	default:
 	    usage();
 	    /*NOTREACHED*/
+	}
+    }
+
+    for(fd = 3; fd < (int)FD_SETSIZE; fd++) {
+	if (fd != debug_fd() &&
+	    fd != rst_flags->pipe_to_fd &&
+	    fd != rst_flags->header_to_fd) {
+	    /*
+	     * Make sure nobody spoofs us with a lot of extra open files
+	     * that would cause a successful open to get a very high file
+	     * descriptor, which in turn might be used as an index into
+	     * an array (e.g. an fd_set).
+	     */
+	    close(fd);
 	}
     }
 
@@ -411,7 +452,7 @@ main(
     }
 
     config_init(CONFIG_INIT_EXPLICIT_NAME, argv[optind++]);
-    apply_config_overwrites(cfg_ovr);
+    apply_config_overrides(cfg_ovr);
 
     conf_diskfile = config_dir_relative(getconf_str(CNF_DISKFILE));
     read_diskfile(conf_diskfile, &diskq);
@@ -440,7 +481,7 @@ main(
     if(rst_flags->inventory_log){
 	g_fprintf(stderr, _("Beginning tape-by-tape search.\n"));
 	search_tapes(stderr, stdin, rst_flags->alt_tapedev == NULL,
-                     NULL, dumpspecs, rst_flags, NULL);
+                     NULL, dumpspecs, rst_flags, our_features);
 	dbclose();
 	exit(0);
     }
@@ -460,7 +501,7 @@ main(
     }
     log_add(L_INFO, "%s pid %ld", get_pname(), (long)getpid());
     search_tapes(NULL, stdin, rst_flags->alt_tapedev == NULL,
-                 needed_tapes, dumpspecs, rst_flags, NULL);
+                 needed_tapes, dumpspecs, rst_flags, our_features);
     cleanup();
 
     dumpspec_list_free(dumpspecs);

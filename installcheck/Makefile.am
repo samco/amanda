@@ -27,6 +27,7 @@ server_tests = \
 	Amanda_Changer_disk \
 	Amanda_Changer_null \
 	Amanda_Changer_rait \
+	Amanda_Changer_robot \
 	Amanda_Changer_single \
 	Amanda_Cmdline \
 	Amanda_Disklist \
@@ -35,19 +36,24 @@ server_tests = \
 	Amanda_Holding \
 	Amanda_Logfile \
 	Amanda_Process \
+	Amanda_Report \
 	Amanda_Tapelist \
 	Amanda_Taper_Scan \
 	Amanda_Taper_Scan_traditional \
+	Amanda_Taper_Scribe \
 	Amanda_Xfer_serveronly \
 	bigint \
 	taper \
+	amcheck-device \
 	amgetconf \
         amtape \
+        amlabel \
 	amtapetype
 
 # (note that _setupcache should come first here)
 full_tests = \
 	_setupcache \
+	amcheck \
 	amdump \
 	amdevcheck \
 	amcheckdump \
@@ -58,7 +64,8 @@ full_tests = \
 	pp-scripts
 
 restore_tests = \
-	amfetchdump
+	amfetchdump \
+	amrestore
 
 mock_tests = \
 	mock_mtx
@@ -122,7 +129,7 @@ CHECK_PERL_FLAGS=-I$(top_srcdir)/installcheck
 SCRIPTS_PERL = $(tests) $(mocks)
 
 # we don't need to syntax check the test scripts..
-CHECK_PERL =
+SKIP_CHECKS = true
 
 .PHONY: clobber_my_config_is_ok
 clobber_my_config_is_ok:

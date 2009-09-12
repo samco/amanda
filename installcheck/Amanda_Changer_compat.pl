@@ -16,7 +16,7 @@
 # Contact information: Zmanda Inc, 465 S Mathlida Ave, Suite 300
 # Sunnyvale, CA 94086, USA, or: http://www.zmanda.com
 
-use Test::More tests => 28;
+use Test::More tests => 29;
 use File::Path;
 use strict;
 use warnings;
@@ -35,6 +35,7 @@ use Amanda::Changer;
 
 # set up debugging so debug output doesn't interfere with test results
 Amanda::Debug::dbopen("installcheck");
+Installcheck::log_test_output();
 
 # and disable Debug's die() and warn() overrides
 Amanda::Debug::disable_die_override();
@@ -74,10 +75,10 @@ my ($check_res_cb, $check_finished_cb);
     my $expected_err_info;
     my $expected_dev;
     my $msg;
+    my $quit;
 
     $check_res_cb = make_cb('check_res_cb' => sub {
 	my ($err, $res) = @_;
-	Amanda::MainLoop::quit();
 
 	if ($err) {
 	    if (defined($expected_err_info)) {
@@ -94,11 +95,16 @@ my ($check_res_cb, $check_finished_cb);
 		diag("Unexpected reservation");
 	    }
 	}
+
+	if ($res) {
+	    $res->release(finished_cb => $quit);
+	} else {
+	    $quit->();
+	}
     });
 
     $check_finished_cb = make_cb('check_finished_cb' => sub {
-	my ($err) = @_;
-	Amanda::MainLoop::quit();
+	my ($err, $res) = @_;
 
 	if ($err) {
 	    if (defined($expected_err_info)) {
@@ -115,6 +121,19 @@ my ($check_res_cb, $check_finished_cb);
 		diag("Unexpected success");
 	    }
 	}
+
+	if ($res) {
+	    $res->release(finished_cb => $quit);
+	} else {
+	    $quit->();
+	}
+    });
+
+    $quit = make_cb(quit => sub {
+	my ($err) = @_;
+	die $err if $err;
+
+	Amanda::MainLoop::quit();
     });
 
     sub try_run_changer {
@@ -253,6 +272,13 @@ try_run_changer(
     sub { $chg->update(finished_cb => $check_finished_cb); },
     undef, undef, "chg->update doesn't fail");
 
+try_run_changer(
+    sub { $chg->inventory(inventory_cb => $check_finished_cb); },
+    { message => "'chg-compat:' does not support inventory",
+	    type => 'failed', reason => 'notimpl' },
+    undef,
+    "inventory not implemented");
+
 
 # make sure only one reservation can be held at once
 {
@@ -313,8 +339,9 @@ $chg = Amanda::Changer->new();
 die($chg) if $chg->isa("Amanda::Changer::Error");
 
 {
+    my $res;
     my ($get_info, $load_current, $label_current, $load_next,
-        $release_next, $load_by_label, $check_by_label);
+        $released1, $release_next, $load_by_label, $check_by_label);
 
     $get_info = make_cb('get_info' => sub {
         $chg->info(info_cb => $load_current, info => [ 'num_slots', 'fast_search' ]);
@@ -333,7 +360,7 @@ die($chg) if $chg->isa("Amanda::Changer::Error");
     });
 
     $label_current = make_cb('label_current' => sub {
-        my ($err, $res) = @_;
+        (my $err, $res) = @_;
         die $err if ($err);
 
         pass("seek to current slot succeeded");
@@ -345,7 +372,6 @@ die($chg) if $chg->isa("Amanda::Changer::Error");
             or die $dev->error_or_status();
 
         is($res->{'this_slot'}, "1", "this slot is '1'");
-        is($res->{'next_slot'}, "next", "next slot is 'next'");
         $res->set_label(label => "TESTCONF18", finished_cb => $load_next);
     });
 
@@ -355,14 +381,21 @@ die($chg) if $chg->isa("Amanda::Changer::Error");
 
         pass("set_label succeeded");
 
-        $chg->load(slot => "next", res_cb => $release_next);
+	$res->release(finished_cb => $released1);
+    });
+
+    $released1 = make_cb(released1 => sub {
+	my ($err) = @_;
+	die $err if $err;
+
+        $chg->load(relative_slot => "next", res_cb => $release_next);
     });
 
     $release_next = make_cb('release_next' => sub {
-        my ($err, $res) = @_;
+        (my $err, $res) = @_;
         die $err if ($err);
 
-        pass("load 'next' succeeded");
+        pass("load relative slot 'next' succeeded");
 
         $res->release(finished_cb => $load_by_label);
     });
@@ -377,7 +410,7 @@ die($chg) if $chg->isa("Amanda::Changer::Error");
     });
 
     $check_by_label = make_cb('check_by_label' => sub {
-        my ($err, $res) = @_;
+        (my $err, $res) = @_;
         die $err if ($err);
 
         pass("load by label succeeded");
@@ -389,7 +422,12 @@ die($chg) if $chg->isa("Amanda::Changer::Error");
         is($dev->volume_label(), "TESTCONF18",
             "..and finds the right volume");
 
-        Amanda::MainLoop::quit();
+	$res->release(finished_cb => sub {
+	    my ($err) = @_;
+	    die $err if $err;
+
+	    Amanda::MainLoop::quit();
+	});
     });
 
     $get_info->();
@@ -425,6 +463,62 @@ die($chg) if $chg->isa("Amanda::Changer::Error");
     Amanda::MainLoop::call_later($subs{'get_infos'});
     Amanda::MainLoop::run();
     pass("two simultaneous info() invocations are successful");
+}
+
+# scan the changer using except_slots
+{
+    my %subs;
+    my $slot;
+    my %except_slots;
+
+    $subs{'start'} = make_cb(start => sub {
+	$chg->load(relative_slot => "current",
+		   except_slots => { %except_slots },
+		   res_cb => $subs{'loaded'});
+    });
+
+    $subs{'loaded'} = make_cb(loaded => sub {
+        my ($err, $res) = @_;
+	if ($err) {
+	    if ($err->notfound) {
+		# this means the scan is done
+		return $subs{'quit'}->();
+	    } elsif ($err->inuse and defined $err->{'slot'}) {
+		$slot = $err->{'slot'};
+	    } else {
+		die $err;
+	    }
+	} else {
+	    $slot = $res->{'this_slot'};
+	}
+
+	$except_slots{$slot} = 1;
+
+	if ($res) {
+	    $res->release(finished_cb => $subs{'released'});
+	} else {
+	    $subs{'released'}->();
+	}
+    });
+
+    $subs{'released'} = make_cb(released => sub {
+	my ($err) = @_;
+	die $err if $err;
+
+        $chg->load(relative_slot => 'next', slot => $slot,
+		   except_slots => { %except_slots },
+		   res_cb => $subs{'loaded'});
+    });
+
+    $subs{'quit'} = make_cb(quit => sub {
+        Amanda::MainLoop::quit();
+    });
+
+    $subs{'start'}->();
+    Amanda::MainLoop::run();
+
+    is_deeply({ %except_slots }, { 1=>1, 2=>1, 3=>1 },
+	    "scanning with except_slots works");
 }
 
 unlink($changer_filename);

@@ -36,6 +36,7 @@ AC_DEFUN([AMANDA_PROG_GNUTAR],
     if test "x$GNUTAR" = "xno"; then
 	GNUTAR=
     else
+	OLD_GNUTAR=$GNUTAR
 	for gnutar_name in gtar gnutar tar; do
 	    AC_PATH_PROGS(GNUTAR, $gnutar_name, , $LOCSYSPATH)
 	    if test -n "$GNUTAR"; then
@@ -45,11 +46,15 @@ AC_DEFUN([AMANDA_PROG_GNUTAR],
 			    break
 			    ;;
 	       *)
-			    # warning..
-			    AMANDA_MSG_WARN([$GNUTAR is not GNU tar, so it will not be used.])
-			    # reset the cache for GNUTAR so AC_PATH_PROGS will search again
-			    GNUTAR=''
-			    unset ac_cv_path_GNUTAR
+			    if test -n "$OLD_GNUTAR"; then
+				    AMANDA_MSG_WARN([$GNUTAR is not GNU tar, it will be used.])
+			    else 
+				    # warning..
+				    AMANDA_MSG_WARN([$GNUTAR is not GNU tar, so it will not be used.])
+				    # reset the cache for GNUTAR so AC_PATH_PROGS will search again
+				    GNUTAR=''
+				    unset ac_cv_path_GNUTAR
+			    fi
 			    ;;
 	      esac
 	    fi
@@ -62,6 +67,72 @@ AC_DEFUN([AMANDA_PROG_GNUTAR],
     fi
     AC_ARG_VAR(GNUTAR, [Location of the GNU 'tar' binary])
     AC_SUBST(GNUTAR)
+])
+
+# SYNOPSIS
+#
+#   AMANDA_PROG_STAR
+#
+# OVERVIEW
+#
+#   Search for a 'star' binary, placing the result in the precious 
+#   variable STAR.  The discovered binary is tested to ensure it's really
+#   star.
+#
+#   Also handle --with-star
+#
+AC_DEFUN([AMANDA_PROG_STAR],
+[
+    AC_REQUIRE([AMANDA_INIT_PROGS])
+
+    # call with
+    AC_ARG_WITH(star,
+	AS_HELP_STRING([--with-star=PROG],
+		       [use PROG as 'star']),
+	[
+	    # check withval
+	    case "$withval" in
+		/*) STAR="$withval";;
+		y|ye|yes) :;;
+		n|no) STAR=no ;;
+		*)  AC_MSG_ERROR([*** You must supply a full pathname to --with-star]);;
+	    esac
+	    # done
+	]
+    )
+
+    if test "x$STAR" = "xno"; then
+	STAR=
+    else
+	OLD_STAR=$STAR
+	AC_PATH_PROGS(STAR, star, , $LOCSYSPATH)
+	if test -n "$STAR"; then
+	    case `"$STAR" --version 2>/dev/null` in
+	     *star*)
+		    # OK, it is star
+		    break
+		    ;;
+	     *)
+		    if test -n "$OLD_STAR"; then
+			AMANDA_MSG_WARN([$STAR is not star, it will be used.])
+		    else
+			# warning..
+			AMANDA_MSG_WARN([$STAR is not star, so it will not be used.])
+			# reset the cache for STAR so AC_PATH_PROGS will search again
+			STAR=''
+			unset ac_cv_path_STAR
+		    fi
+		    ;;
+	    esac
+	fi
+    fi
+
+    if test "x$STAR" != "x"; then
+	# define unquoted
+	AC_DEFINE_UNQUOTED(STAR, "$STAR", [Location of the 'star' binary])
+    fi
+    AC_ARG_VAR(STAR, [Location of the 'star' binary])
+    AC_SUBST(STAR)
 ])
 
 # SYNOPSIS

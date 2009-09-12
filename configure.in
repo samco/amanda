@@ -101,6 +101,7 @@ AM_GNU_GETTEXT([external])
 AMANDA_S3_DEVICE
 AMANDA_TAPE_DEVICE
 AMANDA_DVDRW_DEVICE
+AMANDA_NDMP_DEVICE
 
 #
 # Security (authentication) mechansims
@@ -120,6 +121,7 @@ AMANDA_PROG_VXDUMP_VXRESTORE
 AMANDA_PROG_VDUMP_VRESTORE
 AMANDA_PROG_DUMP_RESTORE
 AMANDA_PROG_GNUTAR
+AMANDA_PROG_STAR
 AMANDA_PROG_SAMBA_CLIENT
 AMANDA_CHECK_USE_RUNDUMP
 
@@ -145,6 +147,7 @@ AMANDA_PROG_PCAT
 AMANDA_PROG_PERL
 AMANDA_PROG_SWIG
 AMANDA_PS_ARGUMENT
+AMANDA_PROG_RPCGEN
 
 dnl -------------------------------------------------------------------------
 
@@ -204,6 +207,7 @@ AC_CHECK_HEADERS(
 	stdarg.h \
 	stdlib.h \
 	strings.h \
+	rpc/rpc.h \
 	sys/file.h \
 	sys/ioctl.h \
 	sys/ipc.h \
@@ -371,27 +375,14 @@ AC_CONFIG_FILES([
     changer-src/Makefile
     client-src/Makefile
     common-src/Makefile
-    common-src/versuff.c
     config/Makefile
     device-src/Makefile
     application-src/Makefile
     example/Makefile
-    example/amanda-client.conf
-    example/amanda-client-postgresql.conf
-    example/amanda.conf
-    example/xinetd.amandaclient
-    example/xinetd.amandaserver
-    example/inetd.conf.amandaclient
-    example/inetd.conf.amandaserver
-    example/chg-mcutil.conf
-    example/template.d/advanced.conf
-    example/template.d/amanda-S3.conf
-    example/template.d/amanda-harddisk.conf
-    example/template.d/amanda-single-tape.conf
-    example/template.d/amanda-tape-changer.conf
     gnulib/Makefile
     installcheck/Makefile
     man/Makefile
+    ndmp-src/Makefile
     oldrecover-src/Makefile
     packaging/Makefile
     perl/Makefile

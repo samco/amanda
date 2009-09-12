@@ -73,6 +73,7 @@ sub new {
 sub load {
     my $self = shift;
     my %params = @_;
+    $self->validate_params('load', \%params);
 
     return if $self->check_error($params{'res_cb'});
 
@@ -133,7 +134,6 @@ sub new {
     $self->{'device'} = $device;
 
     $self->{'this_slot'} = '1';
-    $self->{'next_slot'} = '1';
     $chg->{'reserved'} = 1;
 
     return $self;
@@ -144,6 +144,9 @@ sub do_release {
     my %params = @_;
 
     $self->{'chg'}->{'reserved'} = 0;
+
+    # unref the device, for good measure
+    $self->{'device'} = undef;
 
     $params{'finished_cb'}->(undef) if $params{'finished_cb'};
 }

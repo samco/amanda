@@ -1,7 +1,6 @@
 # Makefile for Amanda library.
 
 include $(top_srcdir)/config/automake/vars.am
-include $(top_srcdir)/config/automake/scripts.am
 include $(top_srcdir)/config/automake/installperms.am
 include $(top_srcdir)/config/automake/precompile.am
 
@@ -22,6 +21,7 @@ libamxfer_la_SOURCES = \
 	dest-null.c \
 	element-glue.c \
 	filter-xor.c \
+	filter-process.c \
 	source-random.c \
 	source-fd.c \
 	source-pattern.c \

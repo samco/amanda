@@ -64,7 +64,7 @@ typedef enum {
     CONF_BUMPPERCENT,		CONF_BUMPSIZE,		CONF_BUMPDAYS,
     CONF_BUMPMULT,		CONF_ETIMEOUT,		CONF_DTIMEOUT,
     CONF_CTIMEOUT,		CONF_TAPEBUFS,		CONF_TAPELIST,
-    CONF_DEVICE_OUTPUT_BUFFER_SIZE,			CONF_RAWTAPEDEV,
+    CONF_DEVICE_OUTPUT_BUFFER_SIZE,
     CONF_DISKFILE,		CONF_INFOFILE,		CONF_LOGDIR,
     CONF_LOGFILE,		CONF_DISKDIR,		CONF_DISKSIZE,
     CONF_INDEXDIR,		CONF_NETUSAGE,		CONF_INPARALLEL,
@@ -84,11 +84,14 @@ typedef enum {
     CONF_TAPERFLUSH,
     CONF_FLUSH_THRESHOLD_DUMPED,
     CONF_FLUSH_THRESHOLD_SCHEDULED,
-    CONF_DEVICE_PROPERTY,      CONF_PROPERTY,          CONF_PLUGIN,
+    CONF_DEVICE_PROPERTY,      CONF_PROPERTY,		CONF_PLUGIN,
     CONF_APPLICATION,          CONF_APPLICATION_TOOL,
     CONF_SCRIPT,               CONF_SCRIPT_TOOL,
     CONF_EXECUTE_ON,           CONF_EXECUTE_WHERE,	CONF_SEND_AMREPORT_ON,
     CONF_DEVICE,               CONF_ORDER,
+    CONF_NDMP_PROXY_PORT,
+    CONF_NDMP_PROXY_DEBUG_FILE,
+    CONF_NDMP_PROXY_DEBUG_LEVEL,
 
     /* execute on */
     CONF_PRE_DLE_AMCHECK,      CONF_PRE_HOST_AMCHECK,
@@ -553,7 +556,7 @@ static gboolean config_initialized = FALSE;
 static gboolean config_client = FALSE;
 
 /* What config overwrites are applied? */
-static config_overwrites_t *applied_config_overwrites = NULL;
+static config_overrides_t *applied_config_overrides = NULL;
 
 /* All global parameters */
 static val_t conf_data[CNF_CNF];
@@ -635,15 +638,15 @@ static void conf_init_application(val_t *val);
  * Command-line Handling
  */
 
-typedef struct config_overwrite_s {
+typedef struct config_override_s {
     char *key;
     char *value;
-} config_overwrite_t;
+} config_override_t;
 
-struct config_overwrites_s {
+struct config_overrides_s {
     int n_allocated;
     int n_used;
-    config_overwrite_t *ovr;
+    config_override_t *ovr;
 };
 
 /*
@@ -660,7 +663,6 @@ static void free_val_t(val_t *);
 
 /* memory handling */
 static void free_property_t(gpointer p);
-
 
 /* Utility functions/structs for val_t_display_strs */
 static char *exinclude_display_str(val_t *val, int file);
@@ -888,6 +890,9 @@ keytab_t server_keytab[] = {
     { "MAXDUMPSIZE", CONF_MAXDUMPSIZE },
     { "MAXPROMOTEDAY", CONF_MAXPROMOTEDAY },
     { "MEDIUM", CONF_MEDIUM },
+    { "NDMP_PROXY_PORT", CONF_NDMP_PROXY_PORT },
+    { "NDMP_PROXY_DEBUG_FILE", CONF_NDMP_PROXY_DEBUG_FILE },
+    { "NDMP_PROXY_DEBUG_LEVEL", CONF_NDMP_PROXY_DEBUG_LEVEL },
     { "NETUSAGE", CONF_NETUSAGE },
     { "NEVER", CONF_NEVER },
     { "NOFULL", CONF_NOFULL },
@@ -950,7 +955,6 @@ keytab_t server_keytab[] = {
     { "DEVICE_OUTPUT_BUFFER_SIZE", CONF_DEVICE_OUTPUT_BUFFER_SIZE },
     { "TAPECYCLE", CONF_TAPECYCLE },
     { "TAPEDEV", CONF_TAPEDEV },
-    { "RAWTAPEDEV", CONF_RAWTAPEDEV },
     { "TAPELIST", CONF_TAPELIST },
     { "TAPERALGO", CONF_TAPERALGO },
     { "FLUSH_THRESHOLD_DUMPED", CONF_FLUSH_THRESHOLD_DUMPED },
@@ -1083,7 +1087,6 @@ conf_var_t server_var [] = {
    { CONF_PRINTER              , CONFTYPE_STR      , read_str         , CNF_PRINTER              , NULL },
    { CONF_MAILER               , CONFTYPE_STR      , read_str         , CNF_MAILER               , NULL },
    { CONF_TAPEDEV              , CONFTYPE_STR      , read_str         , CNF_TAPEDEV              , NULL },
-   { CONF_RAWTAPEDEV           , CONFTYPE_STR      , read_str         , CNF_RAWTAPEDEV           , NULL },
    { CONF_DEVICE_PROPERTY      , CONFTYPE_PROPLIST , read_property    , CNF_DEVICE_PROPERTY      , NULL },
    { CONF_PROPERTY             , CONFTYPE_PROPLIST , read_property    , CNF_PROPERTY             , NULL },
    { CONF_TPCHANGER            , CONFTYPE_STR      , read_str         , CNF_TPCHANGER            , NULL },
@@ -1153,6 +1156,9 @@ conf_var_t server_var [] = {
    { CONF_RESERVED_UDP_PORT    , CONFTYPE_INTRANGE , read_intrange    , CNF_RESERVED_UDP_PORT    , validate_reserved_port_range },
    { CONF_RESERVED_TCP_PORT    , CONFTYPE_INTRANGE , read_intrange    , CNF_RESERVED_TCP_PORT    , validate_reserved_port_range },
    { CONF_UNRESERVED_TCP_PORT  , CONFTYPE_INTRANGE , read_intrange    , CNF_UNRESERVED_TCP_PORT  , validate_unreserved_port_range },
+   { CONF_NDMP_PROXY_PORT      , CONFTYPE_INT      , read_int         , CNF_NDMP_PROXY_PORT      , NULL },
+   { CONF_NDMP_PROXY_DEBUG_FILE, CONFTYPE_STR      , read_str         , CNF_NDMP_PROXY_DEBUG_FILE, NULL },
+   { CONF_NDMP_PROXY_DEBUG_LEVEL,CONFTYPE_INT      , read_int         , CNF_NDMP_PROXY_DEBUG_LEVEL,NULL },
    { CONF_UNKNOWN              , CONFTYPE_INT      , NULL             , CNF_CNF                  , NULL }
 };
 
@@ -1699,16 +1705,17 @@ read_confline(
     case CONF_DEFINE:
 	if (is_client) {
 	    get_conftoken(CONF_ANY);
-	    if(tok == CONF_APPLICATION_TOOL) get_application();
-	    else if(tok == CONF_SCRIPT_TOOL) get_pp_script();
+	    /* accept application-tool here, too, for backward compatibility */
+	    if(tok == CONF_APPLICATION_TOOL || tok == CONF_APPLICATION) get_application();
+	    else if(tok == CONF_SCRIPT_TOOL || tok == CONF_SCRIPT) get_pp_script();
 	    else conf_parserror(_("APPLICATION-TOOL or SCRIPT-TOOL expected"));
 	} else {
 	    get_conftoken(CONF_ANY);
 	    if(tok == CONF_DUMPTYPE) get_dumptype();
 	    else if(tok == CONF_TAPETYPE) get_tapetype();
 	    else if(tok == CONF_INTERFACE) get_interface();
-	    else if(tok == CONF_APPLICATION_TOOL) get_application();
-	    else if(tok == CONF_SCRIPT_TOOL) get_pp_script();
+	    else if(tok == CONF_APPLICATION_TOOL || tok == CONF_APPLICATION) get_application();
+	    else if(tok == CONF_SCRIPT_TOOL || tok == CONF_SCRIPT) get_pp_script();
 	    else if(tok == CONF_DEVICE) get_device_config();
 	    else if(tok == CONF_CHANGER) get_changer_config();
 	    else if(tok == CONF_HOLDING) get_holdingdisk(1);
@@ -1759,7 +1766,6 @@ handle_deprecated_keyword(void)
      */
 
     static tok_t warning_deprecated[] = {
-        CONF_RAWTAPEDEV,  /* 2007-01-23 */
         CONF_TAPEBUFS,    /* 2007-10-15 */
 	CONF_FILE_PAD,	  /* 2008-07-01 */
         0
@@ -1778,12 +1784,13 @@ handle_invalid_keyword(
     const char * token)
 {
     static const char * error_deprecated[] = {
+	"rawtapedev",
         NULL
     };
     const char ** s;
 
     for (s = error_deprecated; *s != NULL; s ++) {
-	if (strcmp(*s, token) == 0) {
+	if (g_ascii_strcasecmp(*s, token) == 0) {
 	    conf_parserror(_("error: Keyword %s is deprecated."),
 			   token);
 	    return;
@@ -2388,7 +2395,7 @@ read_application(
     apcur.seen.linenum = current_line_num;
 
     read_block(application_var, apcur.value,
-	       _("application-tool parameter expected"),
+	       _("application parameter expected"),
 	       (name == NULL), *copy_application);
     if(!name)
 	get_conftoken(CONF_NL);
@@ -2435,7 +2442,7 @@ save_application(
     ap = lookup_application(apcur.name);
 
     if(ap != (application_t *)0) {
-	conf_parserror(_("application-tool %s already defined at %s:%d"),
+	conf_parserror(_("application %s already defined at %s:%d"),
 		       ap->name, ap->seen.filename, ap->seen.linenum);
 	return;
     }
@@ -2513,7 +2520,7 @@ read_pp_script(
     pscur.seen.linenum = current_line_num;
 
     read_block(pp_script_var, pscur.value,
-	       _("script-tool parameter expected"),
+	       _("script parameter expected"),
 	       (name == NULL), *copy_pp_script);
     if(!name)
 	get_conftoken(CONF_NL);
@@ -2563,7 +2570,7 @@ save_pp_script(
     ps = lookup_pp_script(pscur.name);
 
     if(ps != (pp_script_t *)0) {
-	conf_parserror(_("script-tool %s already defined at %s:%d"),
+	conf_parserror(_("script %s already defined at %s:%d"),
 		       ps->name, ps->seen.filename, ps->seen.linenum);
 	return;
     }
@@ -4168,7 +4175,7 @@ config_init(
 	config_dir = newstralloc(config_dir, CONFIG_DIR);
     } else {
 	/* ok, then, we won't read anything (for e.g., amrestore), but
-	 * will set up for server-side config_overwrites */
+	 * will set up for server-side config_overrides */
 	amfree(config_name);
 	amfree(config_dir);
 	keytable = server_keytab;
@@ -4295,9 +4302,9 @@ config_uninit(void)
     for(i=0; i<CNF_CNF; i++)
 	free_val_t(&conf_data[i]);
 
-    if (applied_config_overwrites) {
-	free_config_overwrites(applied_config_overwrites);
-	applied_config_overwrites = NULL;
+    if (applied_config_overrides) {
+	free_config_overrides(applied_config_overrides);
+	applied_config_overrides = NULL;
     }
 
     amfree(config_name);
@@ -4334,10 +4341,9 @@ init_defaults(
     conf_init_str(&conf_data[CNF_MAILTO], "operators");
     conf_init_str(&conf_data[CNF_DUMPUSER], CLIENT_LOGIN);
     conf_init_str(&conf_data[CNF_TAPEDEV], DEFAULT_TAPE_DEVICE);
-    conf_init_str(&conf_data[CNF_RAWTAPEDEV], DEFAULT_TAPE_DEVICE);
     conf_init_proplist(&conf_data[CNF_DEVICE_PROPERTY]);
     conf_init_proplist(&conf_data[CNF_PROPERTY]);
-    conf_init_str(&conf_data[CNF_CHANGERDEV], DEFAULT_CHANGER_DEVICE);
+    conf_init_str(&conf_data[CNF_CHANGERDEV], NULL);
     conf_init_str(&conf_data[CNF_CHANGERFILE]             , "changer");
     conf_init_str   (&conf_data[CNF_LABELSTR]             , ".*");
     conf_init_str   (&conf_data[CNF_TAPELIST]             , "tapelist");
@@ -4402,6 +4408,9 @@ init_defaults(
     conf_init_int      (&conf_data[CNF_DEBUG_SELFCHECK]      , 0);
     conf_init_int      (&conf_data[CNF_DEBUG_SENDSIZE]       , 0);
     conf_init_int      (&conf_data[CNF_DEBUG_SENDBACKUP]     , 0);
+    conf_init_int      (&conf_data[CNF_NDMP_PROXY_PORT]      , 0);
+    conf_init_int      (&conf_data[CNF_NDMP_PROXY_DEBUG_LEVEL], 0);
+    conf_init_str      (&conf_data[CNF_NDMP_PROXY_DEBUG_FILE], "");
 #ifdef UDPPORTRANGE
     conf_init_intrange (&conf_data[CNF_RESERVED_UDP_PORT]    , UDPPORTRANGE);
 #else
@@ -4508,18 +4517,18 @@ get_config_options(
 {
     char             **config_options;
     char	     **config_option;
-    int		     n_applied_config_overwrites = 0;
+    int		     n_applied_config_overrides = 0;
     int		     i;
 
-    if (applied_config_overwrites)
-	n_applied_config_overwrites = applied_config_overwrites->n_used;
+    if (applied_config_overrides)
+	n_applied_config_overrides = applied_config_overrides->n_used;
 
-    config_options = alloc((first+n_applied_config_overwrites+1)*SIZEOF(char *));
+    config_options = alloc((first+n_applied_config_overrides+1)*SIZEOF(char *));
     config_option = config_options + first;
 
-    for (i = 0; i < n_applied_config_overwrites; i++) {
-	char *key = applied_config_overwrites->ovr[i].key;
-	char *value = applied_config_overwrites->ovr[i].value;
+    for (i = 0; i < n_applied_config_overrides; i++) {
+	char *key = applied_config_overrides->ovr[i].key;
+	char *value = applied_config_overrides->ovr[i].value;
 	*config_option = vstralloc("-o", key, "=", value, NULL);
 	config_option++;
     }
@@ -4965,12 +4974,14 @@ getconf_list(
 	    rv = g_slist_append(rv, ip->name);
 	}
     } else if (strcasecmp(listname,"application_tool") == 0
-	    || strcasecmp(listname,"application-tool") == 0) {
+	    || strcasecmp(listname,"application-tool") == 0
+	    || strcasecmp(listname,"application") == 0) {
 	for(ap = application_list; ap != NULL; ap=ap->next) {
 	    rv = g_slist_append(rv, ap->name);
 	}
     } else if (strcasecmp(listname,"script_tool") == 0
-	    || strcasecmp(listname,"script-tool") == 0) {
+	    || strcasecmp(listname,"script-tool") == 0
+	    || strcasecmp(listname,"script") == 0) {
 	for(pp = pp_script_list; pp != NULL; pp=pp->next) {
 	    rv = g_slist_append(rv, pp->name);
 	}
@@ -5269,11 +5280,11 @@ getconf_unit_divisor(void)
  * Command-line Handling Implementation
  */
 
-config_overwrites_t *
-new_config_overwrites(
+config_overrides_t *
+new_config_overrides(
     int size_estimate)
 {
-    config_overwrites_t *co;
+    config_overrides_t *co;
 
     if (size_estimate <= 0)
 	size_estimate = 10;
@@ -5287,8 +5298,8 @@ new_config_overwrites(
 }
 
 void
-free_config_overwrites(
-    config_overwrites_t *co)
+free_config_overrides(
+    config_overrides_t *co)
 {
     int i;
 
@@ -5301,8 +5312,8 @@ free_config_overwrites(
     amfree(co);
 }
 
-void add_config_overwrite(
-    config_overwrites_t *co,
+void add_config_override(
+    config_overrides_t *co,
     char *key,
     char *value)
 {
@@ -5322,8 +5333,8 @@ void add_config_overwrite(
 }
 
 void
-add_config_overwrite_opt(
-    config_overwrites_t *co,
+add_config_override_opt(
+    config_overrides_t *co,
     char *optarg)
 {
     char *value;
@@ -5336,28 +5347,28 @@ add_config_overwrite_opt(
     }
 
     *value = '\0';
-    add_config_overwrite(co, optarg, value+1);
+    add_config_override(co, optarg, value+1);
     *value = '=';
 }
 
-config_overwrites_t *
-extract_commandline_config_overwrites(
+config_overrides_t *
+extract_commandline_config_overrides(
     int *argc,
     char ***argv)
 {
     int i, j, moveup;
-    config_overwrites_t *co = new_config_overwrites(*argc/2);
+    config_overrides_t *co = new_config_overrides(*argc/2);
 
     i = 0;
     while (i<*argc) {
 	if(strncmp((*argv)[i],"-o",2) == 0) {
 	    if(strlen((*argv)[i]) > 2) {
-		add_config_overwrite_opt(co, (*argv)[i]+2);
+		add_config_override_opt(co, (*argv)[i]+2);
 		moveup = 1;
 	    }
 	    else {
 		if (i+1 >= *argc) error(_("expect something after -o"));
-		add_config_overwrite_opt(co, (*argv)[i+1]);
+		add_config_override_opt(co, (*argv)[i+1]);
 		moveup = 2;
 	    }
 
@@ -5374,11 +5385,11 @@ extract_commandline_config_overwrites(
     return co;
 }
 
-static cfgerr_level_t internal_apply_config_overwrites(config_overwrites_t *co);
+static cfgerr_level_t internal_apply_config_overrides(config_overrides_t *co);
 
 cfgerr_level_t
-apply_config_overwrites(
-    config_overwrites_t *co)
+apply_config_overrides(
+    config_overrides_t *co)
 {
     int i;
 
@@ -5386,19 +5397,19 @@ apply_config_overwrites(
     assert(keytable != NULL);
     assert(parsetable != NULL);
 
-    cfgerr_level = internal_apply_config_overwrites(co);
+    cfgerr_level = internal_apply_config_overrides(co);
 
     /* merge these overwrites with previous overwrites, if necessary */
-    if (applied_config_overwrites) {
+    if (applied_config_overrides) {
 	for (i = 0; i < co->n_used; i++) {
 	    char *key = co->ovr[i].key;
 	    char *value = co->ovr[i].value;
 
-	    add_config_overwrite(applied_config_overwrites, key, value);
+	    add_config_override(applied_config_overrides, key, value);
 	}
-	free_config_overwrites(co);
+	free_config_overrides(co);
     } else {
-	applied_config_overwrites = co;
+	applied_config_overrides = co;
     }
 
     update_derived_values(config_client);
@@ -5407,13 +5418,13 @@ apply_config_overwrites(
 }
 
 cfgerr_level_t
-reapply_config_overwrites(void)
+reapply_config_overrides(void)
 {
-    if(!applied_config_overwrites) return cfgerr_level;
+    if(!applied_config_overrides) return cfgerr_level;
     assert(keytable != NULL);
     assert(parsetable != NULL);
 
-    cfgerr_level = internal_apply_config_overwrites(applied_config_overwrites);
+    cfgerr_level = internal_apply_config_overrides(applied_config_overrides);
 
     update_derived_values(config_client);
 
@@ -5421,8 +5432,8 @@ reapply_config_overwrites(void)
 }
 
 static cfgerr_level_t
-internal_apply_config_overwrites(
-    config_overwrites_t *co)
+internal_apply_config_overrides(
+    config_overrides_t *co)
 {
     int i;
 
@@ -5445,7 +5456,7 @@ internal_apply_config_overwrites(
 	 * parse it.  This is sneaky! */
 
 	if (key_parm->type == CONFTYPE_STR) {
-	    current_line = vstralloc("\"", value, "\"", NULL);
+	    current_line = quote_string_always(value);
 	} else {
 	    current_line = stralloc(value);
 	}
@@ -6143,12 +6154,12 @@ dump_configuration(void)
 	    prefix = "#";
 	else
 	    prefix = "";
-	g_printf("\n%sDEFINE APPLICATION-TOOL %s {\n", prefix, ap->name);
+	g_printf("\n%sDEFINE APPLICATION %s {\n", prefix, ap->name);
 	for(i=0; i < APPLICATION_APPLICATION; i++) {
 	    for(np=application_var; np->token != CONF_UNKNOWN; np++)
 		if(np->parm == i) break;
 	    if(np->token == CONF_UNKNOWN)
-		error(_("application-tool bad value"));
+		error(_("application bad value"));
 
 	    for(kt = server_keytab; kt->token != CONF_UNKNOWN; kt++)
 		if(kt->token == np->token) break;
@@ -6165,12 +6176,12 @@ dump_configuration(void)
 	    prefix = "#";
 	else
 	    prefix = "";
-	g_printf("\n%sDEFINE SCRIPT-TOOL %s {\n", prefix, ps->name);
+	g_printf("\n%sDEFINE SCRIPT %s {\n", prefix, ps->name);
 	for(i=0; i < PP_SCRIPT_PP_SCRIPT; i++) {
 	    for(np=pp_script_var; np->token != CONF_UNKNOWN; np++)
 		if(np->parm == i) break;
 	    if(np->token == CONF_UNKNOWN)
-		error(_("script-tool bad value"));
+		error(_("script bad value"));
 
 	    for(kt = server_keytab; kt->token != CONF_UNKNOWN; kt++)
 		if(kt->token == np->token) break;
@@ -6322,7 +6333,7 @@ val_t_display_strs(
     case CONFTYPE_STR:
 	if(str_need_quote) {
             if(val->v.s) {
-		buf[0] = vstrallocf("\"%s\"", val->v.s);
+		buf[0] = quote_string_always(val->v.s);
             } else {
 		buf[0] = stralloc("\"\"");
             }
@@ -6538,7 +6549,7 @@ val_t_display_strs(
 
     case CONFTYPE_APPLICATION: {
 	if (val->v.s) {
-	    buf[0] = vstrallocf("\"%s\"", val->v.s);
+	    buf[0] = quote_string_always(val->v.s);
 	} else {
 	    buf[0] = stralloc("");
 	}
@@ -6664,19 +6675,23 @@ proplist_display_str_foreach_fn(
     gpointer value_p,
     gpointer user_data_p)
 {
-    char         *property_s = key_p;
+    char         *property_s = quote_string_always(key_p);
     property_t   *property   = value_p;
     GSList       *value;
     char       ***msg        = (char ***)user_data_p;
 
     /* What to do with property->append? it should be printed only on client */
     if (property->priority) {
-	**msg = vstralloc("priority \"", property_s, "\"", NULL);
+	**msg = vstralloc("priority ", property_s, NULL);
+	amfree(property_s);
     } else {
-	**msg = vstralloc("\"", property_s, "\"", NULL);
+	**msg = property_s;
+	property_s = NULL;
     }
     for(value=property->values; value != NULL; value = value->next) {
-	**msg = vstrextend(*msg, " \"", value->data, "\"", NULL);
+	char *qstr = quote_string_always((char *)value->data);
+	**msg = vstrextend(*msg, " ", qstr, NULL);
+	amfree(qstr);
     }
     (*msg)++;
 }
@@ -6708,7 +6723,9 @@ exinclude_display_str(
 
     if (sl != NULL) {
 	for(excl = sl->first; excl != NULL; excl = excl->next) {
-            vstrextend(&rval, " \"", excl->name, "\"", NULL);
+	    char *qstr = quote_string_always(excl->name);
+            vstrextend(&rval, " ", qstr, NULL);
+	    amfree(qstr);
 	}
     }
 
@@ -6860,7 +6877,9 @@ parm_key_info(
 	    if (val) *val = &ip->value[np->parm];
 	    if (parm) *parm = np;
 	    success = TRUE;
-	} else if (strcmp(subsec_type, "APPLICATION_TOOL") == 0) {
+	/* accept the old name here, too */
+	} else if (strcmp(subsec_type, "APPLICATION_TOOL") == 0
+		|| strcmp(subsec_type, "APPLICATION") == 0) {
 	    ap = lookup_application(subsec_name);
 	    if (!ap) goto out;
 	    for(np = application_var; np->token != CONF_UNKNOWN; np++) {
@@ -6872,7 +6891,9 @@ parm_key_info(
 	    if (val) *val = &ap->value[np->parm];
 	    if (parm) *parm = np;
 	    success = TRUE;
-	} else if (strcmp(subsec_type, "SCRIPT_TOOL") == 0) {
+	/* accept the old name here, too */
+	} else if (strcmp(subsec_type, "SCRIPT_TOOL") == 0
+		|| strcmp(subsec_type, "SCRIPT") == 0) {
 	    pp = lookup_pp_script(subsec_name);
 	    if (!pp) goto out;
 	    for(np = pp_script_var; np->token != CONF_UNKNOWN; np++) {
@@ -7144,5 +7165,4 @@ gint compare_pp_script_order(
 {
     return pp_script_get_order(lookup_pp_script((char *)a)) > pp_script_get_order(lookup_pp_script((char *)b));
 }
-
 

@@ -37,7 +37,6 @@
 #include "protocol.h"
 #include "security.h"
 #include "stream.h"
-#include "version.h"
 #include "fileheader.h"
 #include "amfeatures.h"
 #include "server_util.h"
@@ -121,7 +120,7 @@ main(
     times_t runtime;
     am_feature_t *their_features = NULL;
     int a;
-    config_overwrites_t *cfg_ovr = NULL;
+    config_overrides_t *cfg_ovr = NULL;
     char *cfg_opt = NULL;
     char *m;
 
@@ -146,13 +145,13 @@ main(
     add_amanda_log_handler(amanda_log_stderr);
     add_amanda_log_handler(amanda_log_trace_log);
 
-    cfg_ovr = extract_commandline_config_overwrites(&argc, &argv);
+    cfg_ovr = extract_commandline_config_overrides(&argc, &argv);
 
     if (argc > 1) 
 	cfg_opt = argv[1];
 
     config_init(CONFIG_INIT_EXPLICIT_NAME | CONFIG_INIT_USE_CWD, cfg_opt);
-    apply_config_overwrites(cfg_ovr);
+    apply_config_overrides(cfg_ovr);
 
     if (config_errors(NULL) >= CFGERR_WARNINGS) {
 	config_print_errors();
@@ -171,7 +170,7 @@ main(
     g_fprintf(stderr,
 	    _("%s: pid %ld executable %s version %s\n"),
 	    get_pname(), (long) getpid(),
-	    argv[0], version());
+	    argv[0], VERSION);
     fflush(stderr);
 
     /* now, make sure we are a valid user */

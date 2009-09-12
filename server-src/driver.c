@@ -43,7 +43,6 @@
 #include "infofile.h"
 #include "logfile.h"
 #include "fsusage.h"
-#include "version.h"
 #include "driverio.h"
 #include "server_util.h"
 #include "timestamp.h"
@@ -187,7 +186,7 @@ main(
     char *line;
     char hostname[1025];
     intmax_t kb_avail;
-    config_overwrites_t *cfg_ovr = NULL;
+    config_overrides_t *cfg_ovr = NULL;
     char *cfg_opt = NULL;
     holdalloc_t *ha, *ha_last;
 
@@ -219,12 +218,12 @@ main(
 
     startclock();
 
-    cfg_ovr = extract_commandline_config_overwrites(&argc, &argv);
+    cfg_ovr = extract_commandline_config_overrides(&argc, &argv);
 
     if (argc > 1)
 	cfg_opt = argv[1];
     config_init(CONFIG_INIT_EXPLICIT_NAME | CONFIG_INIT_USE_CWD, cfg_opt);
-    apply_config_overwrites(cfg_ovr);
+    apply_config_overrides(cfg_ovr);
 
     conf_diskfile = config_dir_relative(getconf_str(CNF_DISKFILE));
     read_diskfile(conf_diskfile, &origq);
@@ -239,7 +238,7 @@ main(
 
     log_add(L_INFO, "%s pid %ld", get_pname(), (long)getpid());
     g_printf(_("%s: pid %ld executable %s version %s\n"),
-	   get_pname(), (long) getpid(), argv[0], version());
+	   get_pname(), (long) getpid(), argv[0], VERSION);
 
     if(argc > 2) {
         if(strncmp(argv[2], "nodump", 6) == 0) {
@@ -293,11 +292,9 @@ main(
 	hd_driver_timestamp = stralloc(driver_timestamp);
     }
 
-    taper_program = vstralloc(amlibexecdir, "/", "taper", versionsuffix(), NULL);
-    dumper_program = vstralloc(amlibexecdir, "/", "dumper", versionsuffix(),
-			       NULL);
-    chunker_program = vstralloc(amlibexecdir, "/", "chunker", versionsuffix(),
-			       NULL);
+    taper_program = vstralloc(amlibexecdir, "/", "taper", NULL);
+    dumper_program = vstralloc(amlibexecdir, "/", "dumper", NULL);
+    chunker_program = vstralloc(amlibexecdir, "/", "chunker", NULL);
 
     conf_taperalgo = getconf_taperalgo(CNF_TAPERALGO);
     conf_tapetype = getconf_str(CNF_TAPETYPE);

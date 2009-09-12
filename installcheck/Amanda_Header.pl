@@ -22,9 +22,11 @@ use strict;
 use lib "@amperldir@";
 use Amanda::Header;
 use Amanda::Debug;
+use Installcheck;
 
 # put the debug messages somewhere
 Amanda::Debug::dbopen("installcheck");
+Installcheck::log_test_output();
 
 # Not much to test, but we can at least exercise the constructor and destructor,
 # and the SWIG getters and setters:
@@ -43,6 +45,7 @@ like($block,
      "generated header looks OK");
 is(length($block), 32768, "generated header has correct length");
 
-my $hdr2 = Amanda::Header->from_string($block);
-is($hdr2->{'name'}, "TAPE17",
+$hdr = Amanda::Header->from_string($block);
+is($hdr->{'name'}, "TAPE17",
    "from_string gives a reasonable-looking object");
+

@@ -96,6 +96,7 @@ sub new {
 sub load {
     my $self = shift;
     my %params = @_;
+    $self->validate_params('load', \%params);
     return if $self->check_error($params{'res_cb'});
 
     if ($self->{'reserved'}) {
@@ -122,7 +123,7 @@ sub load {
 	$subs{'start_load'}->();
     });
 
-    $subs{'start_load'} = make_cb(start_lod => sub {
+    $subs{'start_load'} = make_cb(start_load => sub {
 	if (exists $params{'label'}) {
 	    if ($self->{'searchable'}) {
 		$self->_run_tpchanger($subs{'load_run_done'}, "-search", $params{'label'});
@@ -130,6 +131,20 @@ sub load {
 		# not searchable -- run a manual scan
 		$self->_manual_scan(%params);
 	    }
+	} elsif (exists $params{'relative_slot'}) {
+	    # if there is an explicit $slot, then just hope it's the same as the current
+	    # slot, or we're in trouble.  We don't know what the current slot is, so we
+	    # can't verify, but the current slot is set on *every* load, so this works.
+
+	    # if we've already seen nslots slots, then the next slot is certainly
+	    # one of them, so the iteration should terminate
+	    if (exists $params{'except_slots'} and (keys %{$params{'except_slots'}}) == $self->{'nslots'}) {
+		return $self->make_error("failed", $params{'res_cb'},
+		    reason => 'notfound',
+		    message => "all slots have been loaded");
+	    }
+
+	    $self->_run_tpchanger($subs{'load_run_done'}, "-slot", $params{'relative_slot'});
 	} elsif (exists $params{'slot'}) {
 	    $self->_run_tpchanger($subs{'load_run_done'}, "-slot", $params{'slot'});
 	}
@@ -161,17 +176,27 @@ sub _manual_scan {
     my $self = shift;
     my %params = @_;
     my $nchecked = 0;
-    my ($run_cb, $load_next);
+    my ($get_info, $got_info, $run_cb, $load_next);
+
+    my $user_msg_fn = $params{'user_msg_fn'};
+    $user_msg_fn ||= sub { Amanda::Debug::info("chg-compat: " . $_[0]); };
 
     # search manually, starting with "current" and proceeding through nslots-1
-    # loads of "next"
+    # loads of "next".  This doesn't use the except_slots iteration mechanism as
+    # that would just add extra layers of complexity with no benefit
 
-    # TODO: support the case where nslots == -1
+    $get_info = sub {
+	$self->_get_info($got_info);
+    };
 
-    debug("Amanda::Changer::compat: beginning manual scan");
+    $got_info = sub {
+	$user_msg_fn->("beginning manual scan of $self->{nslots} slots");
+	$self->_run_tpchanger($run_cb, "-slot", "current");
+    };
     $run_cb = sub {
         my ($exitval, $slot, $rest) = @_;
 
+	$user_msg_fn->("updated slot $slot");
 	if ($exitval == 0) {
 	    # if we're looking for a label, check what we got
 	    if (defined $params{'label'}) {
@@ -209,12 +234,10 @@ sub _manual_scan {
 	    }
 	}
 
-	debug("Amanda::Changer::compat: manual scanning next slot");
 	$self->_run_tpchanger($run_cb, "-slot", "next");
     };
 
-    debug("Amanda::Changer::compat: manual scanning current slot");
-    $self->_run_tpchanger($run_cb, "-slot", "current");
+    $get_info->();
 }
 
 # takes $res_cb, $slot and $rest; creates and configures the device, and calls
@@ -333,6 +356,12 @@ sub update {
     my $self = shift;
     my %params = @_;
 
+    if ($params{'changed'}) {
+	return $self->make_error("failed", $params{'finished_cb'},
+	    reason => 'invalid',
+	    message => 'chg-compat does not support specifying what has changed');
+    }
+
     my $scan_done_cb = make_cb(scan_done_cb => sub {
 	my ($err, $res) = @_;
 	if ($err) {
@@ -347,6 +376,7 @@ sub update {
     $self->_manual_scan(
 	res_cb => $scan_done_cb,
 	label => undef, # search forever
+	user_msg_fn => $params{'user_msg_fn'},
     );
 }
 
@@ -593,7 +623,6 @@ sub new {
 
     $self->{'device'} = $device;
     $self->{'this_slot'} = $slot;
-    $self->{'next_slot'} = "next"; # clever, no?
 
     # mark the changer as reserved
     $self->{'chg'}->{'reserved'} = $device;
@@ -609,6 +638,9 @@ sub do_release {
 	my ($message) = @_;
 
 	$self->{'chg'}->{'reserved'} = 0;
+
+	# unref the device, for good measure
+	$self->{'device'} = undef;
 
 	$params{'finished_cb'}->($message) if $params{'finished_cb'};
     };

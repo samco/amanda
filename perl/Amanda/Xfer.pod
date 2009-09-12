@@ -36,7 +36,7 @@ Amanda::Xfer - the transfer architecture
     Amanda::Xfer::Source::Fd->new($infd),
     Amanda::Xfer::Dest::Fd->new($outfd)
   ]);
-  $xfer->get_source()->set_callback(sub {
+  $xfer->start(sub {
       my ($src, $xmsg, $xfer) = @_;
       print "Message from $xfer: $xmsg\n"; # use stringify operations
       if ($xfer->get_status() == $XFER_DONE) {
@@ -44,7 +44,6 @@ Amanda::Xfer - the transfer architecture
 	  Amanda::MainLoop::quit();
       }
   });
-  $xfer->start();
   Amanda::MainLoop::run();
 
 See L<http://wiki.zmanda.com/index.php/XFA> for background on the
@@ -64,22 +63,16 @@ The resulting object has the following methods:
 
 =over
 
-=item get_source()
+=item start($cb)
 
-Get the L<Amanda::MainLoop> event source through which messages will
-be delivered for this transfer.  Use its C<set_callback> method to
-connect a perl sub for processing events.  You I<must> C<release> the
-source when the transfer is complete!
+Start this transfer.  Processing takes place asynchronously, and messages will
+begin queueing up immediately.  If C<$cb> is given, then it is installed as the
+callback for messages from this transfer.  The callback receives three
+arguments: the event source, the message, and a reference to the controlling
+transfer.  See the description of C<Amanda::Xfer::Msg>, below, for details.
 
-The callback from this event source receives three arguments: the
-event source, the message, and a reference to the controlling
-transfer.  See the description of C<Amanda::Xfer::Msg>, below, for
-details.
-
-=item start()
-
-Start this transfer.  Processing takes place asynchronously, and
-messages will begin queueing up immediately.
+There is no need to remove the source on completion of the transfer - that is
+handled for you.
 
 =item cancel()
 
@@ -100,6 +93,16 @@ debugging messages.  This method is automatically invoked when a
 transfer is interpolated into a string:
 
   print "Starting $xfer\n";
+
+=item get_source()
+
+Get the L<Amanda::MainLoop> event source through which messages will
+be delivered for this transfer.  Use its C<set_callback> method to
+connect a perl sub for processing events. 
+
+Use of this method is deprecated; instead, pass a callback to the C<start>
+method.  If you set a callback via C<get_source>, then you I<must> C<remove>
+the source when the transfer is complete!
 
 =back
 
@@ -155,11 +158,43 @@ check for correct output.
 
   Amanda::Xfer::Source::Pattern->new($length, $pattern);
 
+=head3 Amanda::Xfer::Source::Taper (SERVER ONLY)
+
 This source provides I<length> bytes containing copies of
 I<pattern>. If I<length> is zero, the source provides an unlimited
 number of bytes.
 
+  Amanda::Xfer::Source::Taper->new()
+
+This source reads a datastream composed of on-device files.  It contains no
+logic to decide I<which> files to assemble into the datastream; instead, it
+relies on the caller to supply pre-positioned devices:
+
+  $src->start_part($device);
+
+Once C<start_part> is called, the source will read until C<$device> produces an
+EOF.  As each part is completed, the element sends an C<$XMSG_DONE>
+C<Amanda::Xfer::Msg>, with the following keys:
+
+ size	    bytes read from the device
+ duration   time spent reading
+ fileno     the on-media file number from which the part was read
+
+Call C<start_part> with C<$device = undef> to indicate that there are no more
+parts.
+
 =head2 Transfer Filters
+
+=head3 Amanda::Xfer::Filter:Process
+
+  Amanda::Xfer::Filter::Process->new([@args], $need_root);
+
+This filter will pipe data through the standard file descriptors of the
+subprocess specified by C<@args>.  If C<$need_root> is true, it will attempt to
+change to uid 0 before executing the process.  Standard output from the process
+is redirected to the debug log.  Note that the process is invoked directly, not
+via a shell, so shell metacharcters (e.g., C<< 2>&1 >>) will not function as
+expected.
 
 =head3 Amanda::Xfer::Filter:Xor
 
@@ -234,7 +269,7 @@ C<Amanda::Xfer::Msg>, with the following keys:
 
  successful true if the whole part was written
  eof	    recipient should not call start_part
- size	    bytes written to tape
+ size	    bytes written to volume
  duration   time spent writing, not counting changer ops, etc.
  partnum    the zero-based number of this part in the overall dumpfile
  fileno     the on-media file number used for this part, or 0 if no file

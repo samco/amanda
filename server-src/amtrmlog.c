@@ -37,7 +37,6 @@
 #include "diskfile.h"
 #include "tapefile.h"
 #include "find.h"
-#include "version.h"
 
 int amtrmidx_debug = 0;
 
@@ -65,7 +64,7 @@ main(
     char *conf_tapelist;
     char *conf_logdir;
     int dumpcycle;
-    config_overwrites_t *cfg_ovr = NULL;
+    config_overrides_t *cfg_ovr = NULL;
 
     /*
      * Configure program for internationalization:
@@ -84,7 +83,7 @@ main(
     /* Don't die when child closes pipe */
     signal(SIGPIPE, SIG_IGN);
 
-    cfg_ovr = extract_commandline_config_overwrites(&argc, &argv);
+    cfg_ovr = extract_commandline_config_overrides(&argc, &argv);
 
     if (argc > 1 && strcmp(argv[1], "-t") == 0) {
 	amtrmidx_debug = 1;
@@ -98,10 +97,10 @@ main(
     }
 
     dbopen(DBG_SUBDIR_SERVER);
-    dbprintf(_("%s: version %s\n"), argv[0], version());
+    dbprintf(_("%s: version %s\n"), argv[0], VERSION);
 
     config_init(CONFIG_INIT_EXPLICIT_NAME, argv[1]);
-    apply_config_overwrites(cfg_ovr);
+    apply_config_overrides(cfg_ovr);
 
     conf_diskfile = config_dir_relative(getconf_str(CNF_DISKFILE));
     read_diskfile(conf_diskfile, &diskl);

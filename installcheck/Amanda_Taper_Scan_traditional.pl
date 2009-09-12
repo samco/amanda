@@ -35,6 +35,7 @@ use Amanda::Taper::Scan;
 
 # set up debugging so debug output doesn't interfere with test results
 Amanda::Debug::dbopen("installcheck");
+Installcheck::log_test_output();
 
 # and disable Debug's die() and warn() overrides
 Amanda::Debug::disable_die_override();
@@ -113,12 +114,12 @@ sub run_scan {
     return $error, $label, $mode;
 }
 
-# set the "current" slot on the changer
+# set the current slot on the changer
 sub set_current_slot {
     my ($slot) = @_;
 
-    -e "$taperoot/current" && unlink("$taperoot/current");
-    symlink("slot$slot", "$taperoot/current");
+    -e "$taperoot/data" && unlink("$taperoot/data");
+    symlink("slot$slot", "$taperoot/data");
 }
 
 # set up and load a config

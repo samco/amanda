@@ -87,7 +87,6 @@ sub run {
 
     $self->{'dst_chg'} = Amanda::Changer->new($self->{'dst_changer'});
     $self->{'dst_res'} = undef;
-    $self->{'dst_next'} = undef;
     $self->{'dst_dev'} = undef;
     $self->{'dst_label'} = undef;
 
@@ -128,11 +127,11 @@ sub generate_new_dst_label {
 
 sub add_dump_to_db {
     my $self = shift;
-    my ($next_file) = @_;
+    my ($next_file, $filenum) = @_;
 
     my $dump = {
 	'label' => $self->{'dst_label'},
-	'filenum' => $next_file->{'filenum'},
+	'filenum' => $filenum,
 	'dump_timestamp' => $next_file->{'dump_timestamp'},
 	'write_timestamp' => $self->{'dst_timestamp'},
 	'hostname' => $next_file->{'hostname'},
@@ -249,12 +248,10 @@ sub load_next_volumes {
 	    $self->{'dst_dev'}->finish()
 		or fail $self->{'dst_dev'}->error_or_status();
 	    $self->{'dst_dev'} = undef;
-	    $self->{'dst_next'} = $self->{'dst_res'}->{'next_slot'};
 
 	    $self->{'dst_res'}->release(
 		finished_cb => $load_dst);
 	} else {
-	    $self->{'dst_next'} = "current";
 	    $load_dst->(undef);
 	}
     });
@@ -262,12 +259,20 @@ sub load_next_volumes {
     $load_dst = make_cb('load_dst' => sub {
 	my ($err) = @_;
 	fail $err if $err;
-	vlog("Loading destination slot $self->{dst_next}");
+	vlog("Loading next destination slot");
 
-	$self->{'dst_chg'}->load(
-	    slot => $self->{'dst_next'},
-	    set_current => 1,
-	    res_cb => $open_dst);
+	if (defined $self->{'dst_res'}) {
+	    $self->{'dst_chg'}->load(
+		relative_slot => 'next',
+		slot => $self->{'dst_res'}->{'this_slot'},
+		set_current => 1,
+		res_cb => $open_dst);
+	} else {
+	    $self->{'dst_chg'}->load(
+		relative_slot => "current",
+		set_current => 1,
+		res_cb => $open_dst);
+	}
     });
 
     $open_dst = make_cb('open_dst' => sub {
@@ -344,6 +349,7 @@ sub load_next_volumes {
 sub seek_and_copy {
     my $self = shift;
     my ($next_file) = @_;
+    my $dst_filenum;
 
     vlog("Copying file #$next_file->{filenum}");
 
@@ -367,9 +373,12 @@ sub seek_and_copy {
 	fail "Error starting new file: " . $self->{'dst_dev'}->error_or_status();
     }
 
+    # and track the destination filenum correctly
+    $dst_filenum = $self->{'dst_dev'}->file();
+
     # now put together a transfer to copy that data.
     my $xfer;
-    my $xfer_cb = make_cb('xfer_cb' => sub {
+    my $xfer_cb = sub {
 	my ($src, $msg, $elt) = @_;
 	if ($msg->{type} == $XMSG_INFO) {
 	    vlog("while transferring: $msg->{message}\n");
@@ -378,25 +387,24 @@ sub seek_and_copy {
 	    fail $msg->{elt} . " failed: " . $msg->{message};
 	}
 	if ($xfer->get_status() == $Amanda::Xfer::XFER_DONE) {
-	    $xfer->get_source()->remove();
 	    debug("transfer completed");
 
 	    # add this dump to the logfile
-	    $self->add_dump_to_db($next_file);
+	    $self->add_dump_to_db($next_file, $dst_filenum);
 
 	    # start up the next copy
 	    $self->start_next_file();
 	}
-    });
+    };
 
     $xfer = Amanda::Xfer->new([
 	Amanda::Xfer::Source::Device->new($self->{'src_dev'}),
 	Amanda::Xfer::Dest::Device->new($self->{'dst_dev'},
 				        getconf($CNF_DEVICE_OUTPUT_BUFFER_SIZE)),
     ]);
-    $xfer->get_source()->set_callback($xfer_cb);
+
     debug("starting transfer");
-    $xfer->start();
+    $xfer->start($xfer_cb);
 }
 
 ## Application initialization
@@ -431,10 +439,10 @@ EOF
 
 Amanda::Util::setup_application("amvault", "server", $CONTEXT_CMDLINE);
 
-my $config_overwrites = new_config_overwrites($#ARGV+1);
+my $config_overrides = new_config_overrides($#ARGV+1);
 Getopt::Long::Configure(qw{ bundling });
 GetOptions(
-    'o=s' => sub { add_config_overwrite_opt($config_overwrites, $_[1]); },
+    'o=s' => sub { add_config_override_opt($config_overrides, $_[1]); },
     'q|quiet' => \$quiet,
 ) or usage();
 
@@ -443,7 +451,7 @@ usage unless (@ARGV == 4);
 my ($config_name, $src_write_timestamp, $dst_changer, $label_template) = @ARGV;
 
 config_init($CONFIG_INIT_EXPLICIT_NAME, $config_name);
-apply_config_overwrites($config_overwrites);
+apply_config_overrides($config_overrides);
 my ($cfgerr_level, @cfgerr_errors) = config_errors();
 if ($cfgerr_level >= $CFGERR_WARNINGS) {
     config_print_errors();

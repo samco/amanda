@@ -31,11 +31,6 @@ my $kill_enable=0;
 my $process_alive=0;
 my $verbose=0;
 
-my $suf = '';
-if ( $Amanda::Constants::USE_VERSION_SUFFIXES =~ /^yes$/i ) {
-        $suf="-$Amanda::Constants::VERSION";
-}
-
 sub usage() {
     print "Usage: amcleanup [-k] [-v] [-p] conf\n";
     exit 1;
@@ -43,7 +38,7 @@ sub usage() {
 
 Amanda::Util::setup_application("amcleanup", "server", $CONTEXT_SCRIPTUTIL);
 
-my $config_overwrites = new_config_overwrites($#ARGV+1);
+my $config_overrides = new_config_overrides($#ARGV+1);
 
 Getopt::Long::Configure(qw(bundling));
 GetOptions(
@@ -51,7 +46,7 @@ GetOptions(
     'p' => \$process_alive,
     'v' => \$verbose,
     'help|usage' => \&usage,
-    'o=s' => sub { add_config_overwrite_opt($config_overwrites, $_[1]); },
+    'o=s' => sub { add_config_override_opt($config_overrides, $_[1]); },
 ) or usage();
 
 my $config_name = shift @ARGV;
@@ -61,7 +56,7 @@ if ($kill_enable && $process_alive) {
 }
 
 config_init($CONFIG_INIT_EXPLICIT_NAME, $config_name);
-apply_config_overwrites($config_overwrites);
+apply_config_overrides($config_overrides);
 my ($cfgerr_level, @cfgerr_errors) = config_errors();
 if ($cfgerr_level >= $CFGERR_WARNINGS) {
     config_print_errors();
@@ -74,10 +69,10 @@ Amanda::Util::finish_setup($RUNNING_AS_DUMPUSER);
 
 my $logdir=config_dir_relative(getconf($CNF_LOGDIR));
 my $logfile = "$logdir/log";
-my $amreport="$sbindir/amreport$suf";
-my $amlogroll="$amlibexecdir/amlogroll$suf";
-my $amtrmidx="$amlibexecdir/amtrmidx$suf";
-my $amcleanupdisk="$amlibexecdir/amcleanupdisk$suf";
+my $amreport="$sbindir/amreport";
+my $amlogroll="$amlibexecdir/amlogroll";
+my $amtrmidx="$amlibexecdir/amtrmidx";
+my $amcleanupdisk="$amlibexecdir/amcleanupdisk";
 
 if ( ! -e "$CONFIG_DIR/$config_name" ) {
     die "Configuration directory '$CONFIG_DIR/$config_name' doesn't exist\n";

@@ -135,6 +135,20 @@ EXTRA_DIST += Amanda/Archive.swg Amanda/Archive.pm Amanda/Archive.pod
 MAINTAINERCLEANFILES += Amanda/Archive.c Amanda/Archive.pm
 
 if WANT_SERVER
+# PACKAGE: Amanda::Ndmp
+libNdmpdir = $(amperldir)/auto/Amanda/Ndmp
+libNdmp_LTLIBRARIES = libNdmp.la
+libNdmp_la_SOURCES = Amanda/Ndmp.c $(AMGLUE_SWG)
+libNdmp_la_LDFLAGS = $(PERL_EXT_LDFLAGS)
+libNdmp_la_LIBADD = libamglue.la \
+	$(top_builddir)/server-src/libamserver.la \
+	$(top_builddir)/common-src/libamanda.la
+Amanda_DATA += Amanda/Ndmp.pm
+MAINTAINERCLEANFILES += Amanda/Ndmp.c Amanda/Ndmp.pm
+endif
+EXTRA_DIST += Amanda/Ndmp.swg Amanda/Ndmp.pm
+
+if WANT_SERVER
 # PACKAGE: Amanda::Device
 libDevicedir = $(amperldir)/auto/Amanda/Device
 libDevice_LTLIBRARIES = libDevice.la
@@ -218,6 +232,7 @@ AmandaChanger_DATA = \
 	Amanda/Changer/disk.pm \
 	Amanda/Changer/null.pm \
 	Amanda/Changer/rait.pm \
+	Amanda/Changer/robot.pm \
 	Amanda/Changer/single.pm
 HTML_SOURCE_FILES += $(AmandaChanger_DATA)
 endif
@@ -227,7 +242,8 @@ if WANT_SERVER
 # PACKAGE: Amanda::Taper::*
 AmandaTaperdir = $(amperldir)/Amanda/Taper
 AmandaTaper_DATA = \
-	Amanda/Taper/Scan.pm
+	Amanda/Taper/Scan.pm \
+	Amanda/Taper/Scribe.pm
 HTML_SOURCE_FILES += $(AmandaTaper_DATA)
 endif
 EXTRA_DIST += $(AmandaTaper_DATA)
@@ -282,6 +298,12 @@ libXferServer_la_LIBADD = libamglue.la \
 Amanda_DATA += Amanda/XferServer.pm
 MAINTAINERCLEANFILES += Amanda/XferServer.c Amanda/XferServer.pm
 EXTRA_DIST += Amanda/XferServer.swg Amanda/XferServer.pm Amanda/XferServer.pod
+endif
+
+if WANT_SERVER
+# PACKAGE: Amanda::Report
+Amanda_DATA += Amanda/Report.pm
+EXTRA_DIST += Amanda/Report.pm
 endif
 
 # PACKAGE: Amanda::BigIntCompat

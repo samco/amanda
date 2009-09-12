@@ -32,6 +32,7 @@ use Amanda::Changer;
 
 # set up debugging so debug output doesn't interfere with test results
 Amanda::Debug::dbopen("installcheck");
+Installcheck::log_test_output();
 
 # and disable Debug's die() and warn() overrides
 Amanda::Debug::disable_die_override();
@@ -66,18 +67,20 @@ my $chg = Amanda::Changer->new("chg-null:");
     });
 
     $do_load = make_cb('do_load' => sub {
-	$chg->load(slot => "current",
+	$chg->load(relative_slot => "current",
 		   res_cb => $got_res);
     });
 
     $got_res = make_cb('got_res' => sub {
 	my ($err, $res) = @_;
-	ok(!$err, "no error loading slot 'current'")
+	ok(!$err, "no error loading relative slot 'current'")
 	    or diag($err);
 	is($res->{'device'}->device_name, 'null:',
 	    "returns correct device name");
 
-	Amanda::MainLoop::quit();
+	$res->release(finished_cb => sub {
+	    Amanda::MainLoop::quit();
+	});
     });
 
     # start the loop

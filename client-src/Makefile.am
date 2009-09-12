@@ -18,12 +18,11 @@ LINTFLAGS=$(AMLINTFLAGS)
 
 amlib_LTLIBRARIES =	libamclient.la
 
-amlibexec_PROGRAMS =	noop calcsize killpgrp rundump runtar selfcheck sendbackup sendsize versionsuffix
+amlibexec_PROGRAMS =	noop calcsize killpgrp rundump runtar selfcheck sendbackup sendsize
 
 amlibexec_SCRIPTS = patch-system
 
-CHECK_PERL = $(sbin_SCRIPTS)
-SCRIPTS_PERL = $(CHECK_PERL)
+SCRIPTS_PERL = $(sbin_SCRIPTS)
 SCRIPTS_SHELL = $(amlibexec_SCRIPTS)
 
 libamclient_la_SOURCES=	amandates.c		getfsent.c	\

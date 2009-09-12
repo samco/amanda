@@ -32,6 +32,7 @@ use Amanda::Changer;
 
 # set up debugging so debug output doesn't interfere with test results
 Amanda::Debug::dbopen("installcheck");
+Installcheck::log_test_output();
 
 # and disable Debug's die() and warn() overrides
 Amanda::Debug::disable_die_override();
@@ -63,13 +64,13 @@ my $chg = Amanda::Changer->new("chg-single:tape:/foo");
         is($results{'num_slots'}, 1, "info() returns the correct num_slots");
         is($results{'fast_search'}, 1, "info() returns the correct fast_slots");
 
-	$chg->load(slot => "current",
+	$chg->load(relative_slot => "current",
 		   res_cb => $got_res);
     });
 
     $got_res = make_cb('got_res' => sub {
 	my ($err, $res) = @_;
-	ok(!$err, "no error loading slot 'current'")
+	ok(!$err, "no error loading relative slot 'current'")
 	    or diag($err);
 	is($res->{'device'}->device_name(), 'tape:/foo',
 	    "returns correct device name");
@@ -88,7 +89,13 @@ my $chg = Amanda::Changer->new("chg-single:tape:/foo");
 	      reason => 'inuse' },
 	    "second simultaneous reservation rejected");
 
-	Amanda::MainLoop::quit();
+	# release the first reservation
+	$held_res->release(finished_cb => sub {
+	    my ($err) = @_;
+	    die $err if $err;
+
+	    Amanda::MainLoop::quit();
+	});
     });
 
     # start the loop

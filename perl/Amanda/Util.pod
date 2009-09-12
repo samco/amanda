@@ -36,6 +36,8 @@ Application initialization generally looks like this:
   # .. command-line processing ..
   Amanda::Config::config_init(...);
   Amanda::Util::finish_setup($RUNNING_AS_DUMPUSER);
+  # ..
+  Amanda::Util::finish_application();
 
 =over
 
@@ -109,9 +111,22 @@ If the flag C<$RUNNING_AS_UID_ONLY> is bit-or'd into
 C<$running_as_flags>, then the euid is ignored; this is used for
 programs that expect to be setuid-root.
 
+=item finish_application()
+
+All applications should call this before exiting.
+
 =item get_original_cwd()
 
 Return the original current directory with C<get_original_cwd>.
+
+=item version_opt()
+
+Print the version and exit.  This is intended to be used in C<GetOptions> invocations, e.g.,
+
+  GetOptions(
+    # ...
+    'version' => \&Amanda::Util::version_opt,
+  );
 
 =back
 
@@ -223,7 +238,43 @@ Generate a timestamp from the current time, obeying the
 'USETIMESTAMPS' config parameter.  The Amanda configuration must
 already be loaded.
 
+=item sanitise_filename($fn)
+
+"Santitises" a filename by replacing any characters that might have special
+meaning to a filesystem with underscores.  This operation is I<not> reversible,
+and distinct input filenames I<may> produce identical output filenames.
+
 =back
+
+=head1 Locking Files
+
+Amanda provides a basic mechanism to lock a file and read its contents.  This
+uses operating-system facilities to acquire an advisory lock, so non-Amanda
+applications are not prevented from modifying the file while it is locked.
+
+To create a lock object, call the C<file_lock> constructor, passing the
+filename to lock:
+
+  my $fl = Amanda::Util::file_lock->new($filename)
+
+then, lock the file:
+
+  $fl->lock();
+
+which also reads the contents of the file into memory, accessible via
+
+  my $state = $fl->data();
+
+to change the file contents, call C<write>:
+
+  $fl->write($new_contents);
+
+and unlock the lock with
+
+  $fl->unlock();
+
+Note that the file will be automatically unlocked if the C<file_lock> object is
+garbage-collected.
 
 =cut
 

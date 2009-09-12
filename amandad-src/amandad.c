@@ -428,7 +428,8 @@ main(
 	exit_on_qlength = 1;
     }
 
-    if (getuid() == 0) {
+#ifndef SINGLE_USERID
+    if (geteuid() == 0) {
 	if (strcasecmp(auth, "krb5") != 0) {
 	    struct passwd *pwd;
 	    /* lookup our local user name */
@@ -446,13 +447,13 @@ main(
 	    error(_("'amandad' must be run as user 'root' when using 'krb5' authentication"));
 	}
     }
-
+#endif
 
     /* initialize */
 
     startclock();
 
-    dbprintf(_("version %s\n"), version());
+    dbprintf(_("version %s\n"), VERSION);
     for (i = 0; version_info[i] != NULL; i++) {
 	dbprintf("    %s", version_info[i]);
     }
@@ -633,7 +634,7 @@ protocol_accept(
 	goto send_pkt_out;
     }
 
-    service_path = vstralloc(amlibexecdir, "/", service, versionsuffix(), NULL);
+    service_path = vstralloc(amlibexecdir, "/", service, NULL);
     if (access(service_path, X_OK) < 0) {
 	dbprintf(_("can't execute %s: %s\n"), service_path, strerror(errno));
 	    pkt_init(&pkt_out, P_NAK,
@@ -1663,6 +1664,21 @@ service_new(
 		data_write[i + 1][0] = newfd;
 	    }
 	}
+	while(data_write[4][0] >= DATA_FD_OFFSET &&
+	      data_write[4][0] <= DATA_FD_OFFSET + DATA_FD_COUNT*2 - 1) {
+	    newfd = dup(data_write[4][0]);
+	    if (newfd == -1)
+		error(_("Can't dup out off DATA_FD range"));
+	    data_write[4][0] = newfd;
+	}
+	while(data_write[4][1] >= DATA_FD_OFFSET &&
+	      data_write[4][1] <= DATA_FD_OFFSET + DATA_FD_COUNT*2 - 1) {
+	    newfd = dup(data_write[4][1]);
+	    if (newfd == -1)
+		error(_("Can't dup out off DATA_FD range"));
+	    data_write[4][1] = newfd;
+	}
+
 	for (i = 0; i < DATA_FD_COUNT*2; i++)
 	    close(DATA_FD_OFFSET + i);
 

@@ -50,6 +50,8 @@ void    tape_device_register    (void);
 void    vfs_device_register     (void);
 #ifdef WANT_DVDRW_DEVICE
 void    dvdrw_device_register    (void);
+#ifdef WANT_NDMP_DEVICE
+void    ndmp_device_register    (void);
 #endif
 
 /*
@@ -75,6 +77,8 @@ void device_api_init(void) {
 #endif
 #ifdef WANT_DVDRW_DEVICE
     dvdrw_device_register();
+#ifdef WANT_NDMP_DEVICE
+    ndmp_device_register();
 #endif
 }
 

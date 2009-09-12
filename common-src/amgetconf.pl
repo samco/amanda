@@ -58,7 +58,8 @@ values in subsections are specified in the form TYPE:NAME:PARAMETER.
 With --list, PARAM can be one of
 EOF
     for my $name (keys %Amanda::Config::subsection_names) {
-	print "    $name\n";
+	print "    $name\n"
+	    if $Amanda::Config::subsection_names{$name};
     }
     exit(1);
 }
@@ -101,7 +102,7 @@ my %build_info = (
     'cc' => $Amanda::Constants::CC,
     'version' => $Amanda::Constants::VERSION,
     'assertions' => $Amanda::Constants::ASSERTIONS,
-    'use_version_suffixes' => $Amanda::Constants::USE_VERSION_SUFFIXES,
+    'use_version_suffixes' => 'no', # for backward compatibility
     'locking' => $Amanda::Constants::LOCKING,
 
     # executable paths
@@ -235,13 +236,13 @@ sub conf_param {
 ## Command-line parsing
 
 my $opt_list = '';
-my $config_overwrites = new_config_overwrites($#ARGV+1);
+my $config_overrides = new_config_overrides($#ARGV+1);
 my $execute_where = undef;
 
 Getopt::Long::Configure(qw{bundling});
 GetOptions(
     'list|l' => \$opt_list,
-    'o=s' => sub { add_config_overwrite_opt($config_overwrites, $_[1]); },
+    'o=s' => sub { add_config_override_opt($config_overrides, $_[1]); },
     'execute-where=s' => sub {
         my $where = lc($_[1]);
         fail("Invalid value ($_[1]) for --execute-where. Must be client or server.") 
@@ -288,7 +289,7 @@ if ($parameter =~ /^db(open|close)\./) {
 # finally, finish up the application startup procedure
 Amanda::Util::setup_application("amgetconf", "server", $CONTEXT_SCRIPTUTIL);
 config_init($CONFIG_INIT_EXPLICIT_NAME | $CONFIG_INIT_USE_CWD | $execute_where, $config_name);
-apply_config_overwrites($config_overwrites);
+apply_config_overrides($config_overrides);
 my ($cfgerr_level, @cfgerr_errors) = config_errors();
 if ($cfgerr_level >= $CFGERR_WARNINGS) {
     config_print_errors();

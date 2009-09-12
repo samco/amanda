@@ -45,6 +45,7 @@ use Getopt::Long;
 
 my $chg;
 my $res;
+my $res_device_name;
 
 sub err_result {
     my ($err, $continuation, @cont_args) = @_;
@@ -83,7 +84,7 @@ sub release_and_then {
     my ($release_opts, $andthen) = @_;
     if ($res) {
 	# release the current reservation, then call andthen
-	debug("releasing reservation of " . $res->{'device'}->device_name);
+	debug("releasing reservation of $res_device_name");
 	$res->release(@$release_opts,
 	    finished_cb => sub {
 		my ($error) = @_;
@@ -105,24 +106,30 @@ sub release_and_then {
 
 sub do_slot {
     my ($slot) = @_;
+    my @slotarg = ();
 
     # handle the special cases we support
     if ($slot eq "next" or $slot eq "advance") {
 	if (!$res) {
-            $slot = "next";
+            @slotarg = (relative_slot => "next");
 	} else {
-	    $slot = $res->{'next_slot'};
+	    @slotarg = (relative_slot => 'next', slot => $res->{'this_slot'});
 	}
     } elsif ($slot eq "first") {
-	do_reset();
+	do_reset(); # best we can do.. most old changers treat "reset" as "go to first"
 	return;
+    } elsif ($slot eq "current") {
+	@slotarg = (relative_slot => "current");
     } elsif ($slot eq "prev" or $slot eq "last") {
 	err_result("slot specifier '$slot' is not valid", \&getcmd);
 	return;
+    } else {
+	@slotarg = (slot => $slot);
     }
 
+    debug( join("|", @slotarg) );
     my $load_slot = sub {
-	$chg->load(slot => $slot, set_current => 1,
+	$chg->load(@slotarg, set_current => 1,
 	    res_cb => sub {
 		(my $error, $res) = @_;
 		if ($error) {
@@ -132,8 +139,15 @@ sub do_slot {
 		    # can open it.  This is not forward-compatible, but will
 		    # work for the current fleet of changers, as long as no
 		    # configuration or properties are in effect.
+		    $res_device_name = $res->{'device'}->device_name;
+
+		    # close the device so that the parent process will be able
+		    # to open a tape device.  This assumes that no other references
+		    # to this device are outstanding.
+		    $res->{'device'} = undef;
+
 		    normal_result($res->{'this_slot'},
-			    $res->{'device'}->device_name,
+			    $res_device_name,
 			    \&getcmd);
 		}
 	    }
@@ -223,8 +237,15 @@ sub do_search {
 		    # can open it.  This is not forward-compatible, but will
 		    # work for the current fleet of changers, as long as no
 		    # configuration or properties are in effect.
+		    $res_device_name = $res->{'device'}->device_name;
+
+		    # close the device so that the parent process will be able
+		    # to open a tape device.  This assumes that no other references
+		    # to this device are outstanding.
+		    $res->{'device'} = undef;
+
 		    normal_result($res->{'this_slot'},
-				$res->{'device'}->device_name,
+				$res_device_name,
 				\&getcmd);
 		}
 	    }
@@ -244,7 +265,7 @@ sub do_label {
 		    err_result($error, \&getcmd);
 		} else {
 		    normal_result($res->{'this_slot'},
-				$res->{'device'}->device_name,
+				$res_device_name,
 				\&getcmd);
 		}
             }
@@ -289,10 +310,10 @@ sub finish {
     release_and_then([], \&Amanda::MainLoop::quit);
 }
 
-my $config_overwrites = new_config_overwrites($#ARGV+1);
+my $config_overrides = new_config_overrides($#ARGV+1);
 Getopt::Long::Configure(qw{bundling});
 GetOptions(
-    'o=s' => sub { add_config_overwrite_opt($config_overwrites, $_[1]); }
+    'o=s' => sub { add_config_override_opt($config_overrides, $_[1]); }
 );
 
 Amanda::Util::setup_application("chg-glue", "server", $CONTEXT_DAEMON);
@@ -309,7 +330,7 @@ $SIG{__DIE__} = sub {
 };
 
 config_init($CONFIG_INIT_EXPLICIT_NAME, $config_name);
-apply_config_overwrites($config_overwrites);
+apply_config_overrides($config_overrides);
 my ($cfgerr_level, @cfgerr_errors) = config_errors();
 if ($cfgerr_level >= $CFGERR_WARNINGS) {
     config_print_errors();

@@ -535,7 +535,7 @@ find_next_file(S3Device *self, int last_file) {
         }
     }
 
-    return last_file;
+    return next_file;
 }
 
 static gboolean
@@ -1306,6 +1306,11 @@ s3_device_erase(Device *pself) {
     const char *errmsg = NULL;
     guint response_code;
     s3_error_code_t s3_error_code;
+
+    if (!setup_handle(self)) {
+        /* error set by setup_handle */
+        return FALSE;
+    }
 
     key = special_file_to_key(self, "tapestart", -1);
     if (!s3_delete(self->s3, self->bucket, key)) {

@@ -55,7 +55,12 @@ ssize_t	full_writev(int, struct iovec *, int);
 char *	construct_datestamp(time_t *t);
 char *	construct_timestamp(time_t *t);
 
-/*@only@*//*@null@*/char *quote_string(const char *str);
+/* quote_string only adds "" if they're required; quote_string_always
+ * always adds "" around the string */
+#define quote_string(str) quote_string_maybe((str), 0)
+#define quote_string_always(str) quote_string_maybe((str), 1)
+
+/*@only@*//*@null@*/char *quote_string_maybe(const char *str, gboolean always);
 /*@only@*//*@null@*/char *unquote_string(const char *str);
 
 /* Split a string into space-delimited words, obeying quoting as created by
@@ -212,8 +217,8 @@ void check_running_as(running_as_flags who);
  * need to be root for certain operations. Does nothing if SINGLE_USERID is 
  * defined.
  *
- * @param need_root: if true, try to assume root priviledges; otherwise, drop
- * priviledges.
+ * @param need_root: if 1, try to assume root priviledges; otherwise, drop
+ * priviledges.  If -1, drop them irreversibly.
  * @returns: true if the priviledge change succeeded
  */
 int set_root_privs(int need_root);
@@ -341,5 +346,6 @@ void count_proplist(gpointer key_p,
 void proplist_add_to_argv(gpointer key_p,
 			  gpointer value_p,
 			  gpointer user_data_p);
+
 
 #endif	/* UTIL_H */

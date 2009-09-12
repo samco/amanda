@@ -141,20 +141,9 @@ sub write_one_file(%) {
     $xfer = Amanda::Xfer->new([$source, $dest]);
 
     # set up the relevant callbacks
-    my ($timeout_src, $xfer_src, $spinner_src);
+    my ($timeout_src, $spinner_src);
     my $got_error = 0;
     my $got_timeout = 0;
-
-    $xfer_src = $xfer->get_source();
-    $xfer_src->set_callback(sub {
-	my ($src, $xmsg, $xfer) = @_;
-	if ($xmsg->{type} == $Amanda::Xfer::XMSG_ERROR) {
-	    $got_error = $xmsg->{message};
-	}
-	if ($xfer->get_status() == $Amanda::Xfer::XFER_DONE) {
-	    Amanda::MainLoop::quit();
-	}
-    });
 
     if ($max_time) {
 	$timeout_src = Amanda::MainLoop::timeout_source($max_time * 1000);
@@ -174,9 +163,17 @@ sub write_one_file(%) {
 
     my $start_time = time();
 
-    $xfer->start();
+    $xfer->start(sub {
+	my ($src, $xmsg, $xfer) = @_;
+	if ($xmsg->{type} == $Amanda::Xfer::XMSG_ERROR) {
+	    $got_error = $xmsg->{message};
+	}
+	if ($xfer->get_status() == $Amanda::Xfer::XFER_DONE) {
+	    Amanda::MainLoop::quit();
+	}
+    });
+
     Amanda::MainLoop::run();
-    $xfer_src->remove();
     $spinner_src->remove();
     $timeout_src->remove() if ($timeout_src);
     print STDERR " " x 60, "\r";
@@ -290,7 +287,7 @@ sub data_to_null {
         Amanda::Xfer::Dest::Null->new(0),
     ]); 
 
-    $xfer->get_source()->set_callback(sub {
+    $xfer->start(sub {
 	my ($src, $xmsg, $xfer) = @_;
 	if ($xmsg->{type} == $Amanda::Xfer::XMSG_ERROR) {
 	    $got_error = $xmsg->{message};
@@ -299,7 +296,6 @@ sub data_to_null {
 	    Amanda::MainLoop::quit();
 	}
     });
-    $xfer->start();
 
     Amanda::MainLoop::run();
 }
@@ -602,7 +598,7 @@ EOF
 sub usage {
     print STDERR <<EOF;
 Usage: amtapetype [-h] [-c] [-f] [-b blocksize] [-t typename] [-l label]
-		  [ [-o config_overwrite] ... ] [config] device
+		  [ [-o config_override] ... ] [config] device
         -h   Display this message
         -c   Only check hardware compression state
         -f   Run amtapetype even if the loaded volume is already in use
@@ -625,7 +621,7 @@ EOF
 Amanda::Util::setup_application("amtapetype", "server", $CONTEXT_CMDLINE);
 config_init(0, undef);
 
-my $config_overwrites = new_config_overwrites($#ARGV+1);
+my $config_overrides = new_config_overrides($#ARGV+1);
 
 Getopt::Long::Configure(qw(bundling));
 GetOptions(
@@ -643,7 +639,7 @@ GetOptions(
     'f' => \$opt_force,
     'l' => \$opt_label,
     'p' => \$opt_property,
-    'o=s' => sub { add_config_overwrite_opt($config_overwrites, $_[1]); },
+    'o=s' => sub { add_config_override_opt($config_overrides, $_[1]); },
 ) or usage();
 usage() if (@ARGV < 1 or @ARGV > 2);
 
@@ -653,7 +649,7 @@ if (@ARGV == 2) {
 }
 $opt_device_name= shift @ARGV;
 
-apply_config_overwrites($config_overwrites);
+apply_config_overrides($config_overrides);
 my ($cfgerr_level, @cfgerr_errors) = config_errors();
 if ($cfgerr_level >= $CFGERR_WARNINGS) {
     config_print_errors();
