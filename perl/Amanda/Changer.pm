@@ -1022,6 +1022,9 @@ sub with_locked_state {
 	    # loop until we get the lock, increasing $poll to 10s
 	    $poll += 100 unless $poll >= 10000;
 	    return Amanda::MainLoop::call_after($poll, $subs{'lock'});
+	} elsif ($rv == -1) {
+	    return $self->make_error("fatal", $cb,
+		    message => "Error locking '$statefile'");
 	}
 
 	$subs{'read'}->();
@@ -1300,7 +1303,7 @@ sub _get_implicit_properties {
     }
 
     if (tapetype_seen($tapetype, $TAPETYPE_READBLOCKSIZE)) {
-	$props->{'read_buffer_size'} = {
+	$props->{'read_block_size'} = {
 	    optional => "warn", # optional, but give a warning
 	    priority => 0,
 	    append => 0,
