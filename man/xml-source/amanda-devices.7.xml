@@ -254,6 +254,7 @@ size, regardless of the blocksize used to write the data.</para>
 tapedev "dvdrw:/var/cache/amanda/dvd-cache:/dev/scd0"
 device_property "DVDRW_MOUNT_POINT" "/media/dvd"
 device_property "DVDRW_KEEP_CACHE" "false"
+device_property "DVDRW_UNLABELLED_WHEN_UNMOUNTABLE" "true"
 </programlisting>
 
 <para>The DVD-RW device driver reads and writes optical media such as DVDs and
@@ -276,6 +277,18 @@ directory. On completion of writing the tape, the cache directory is written
 to optical media. The DVDRW_KEEP_CACHE property controls whether the cache
 contents are immediately deleted. When reading, the optical media is first
 mounted and read as a VFS device.</para>
+
+<para>Attempting to mount unformatted media or media that is formatted but
+contains no filesystem will usually result in an error. The boolean
+DVDRW_UNLABELLED_WHEN_UNMOUNTABLE property specifies whether media that cannot
+be mounted should be treated as an empty, unlabelled volume when attempting to
+read the volume label. Setting this property to "false" will result in such
+media being unlabellable.</para>
+
+<para>The properties DVDRW_GROWISOFS_COMMAND, DVDRW_MOUNT_COMMAND and
+DVDRW_UMOUNT_COMMAND specify alternative commands for writing, mounting and
+unmounting optical media. The default is to find the programs using the PATH
+environment variable.</para>
 
 </refsect2>
 

@@ -66,6 +66,7 @@ endif
 
 if WANT_DVDRW_DEVICE
 libamdevice_la_SOURCES += dvdrw-device.c
+endif
 
 if WANT_NDMP_DEVICE
 libamdevice_la_SOURCES += ndmp-device.c

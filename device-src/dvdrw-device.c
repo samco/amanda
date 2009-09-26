@@ -46,6 +46,7 @@ struct _DvdRwDevice {
 	gchar *mount_point;
 	gchar *data_dir;
 	gboolean keep_cache;
+	gboolean unlabelled_when_unmountable;
 	gchar *growisofs_command;
 	gchar *mount_command;
 	gchar *umount_command;
@@ -68,6 +69,10 @@ static DevicePropertyBase device_property_dvdrw_mount_point;
 /* Should the on-disk version be kept after the optical disc has been written? */
 static DevicePropertyBase device_property_dvdrw_keep_cache;
 #define PROPERTY_DVDRW_KEEP_CACHE (device_property_dvdrw_keep_cache.ID)
+
+/* Should a mount failure (eg, a freshly formatted disc) when reading a label be treated like an unlabelled volume? */
+static DevicePropertyBase device_property_dvdrw_unlabelled_when_unmountable;
+#define PROPERTY_DVDRW_UNLABELLED_WHEN_UNMOUNTABLE (device_property_dvdrw_unlabelled_when_unmountable.ID)
 
 /* Where to find the growisofs command */
 static DevicePropertyBase device_property_dvdrw_growisofs_command;
@@ -101,6 +106,10 @@ dvdrw_device_set_mount_point_fn(Device *self,
 
 static gboolean
 dvdrw_device_set_keep_cache_fn(Device *self,
+	DevicePropertyBase *base, GValue *val, PropertySurety surety, PropertySource source);
+
+static gboolean
+dvdrw_device_set_unlabelled_when_unmountable_fn(Device *self,
 	DevicePropertyBase *base, GValue *val, PropertySurety surety, PropertySource source);
 
 static gboolean
@@ -172,6 +181,10 @@ dvdrw_device_register(void)
 		G_TYPE_BOOLEAN, "dvdrw_keep_cache",
 		"Keep on-disk cache after DVD-RW has been written");
 
+	device_property_fill_and_register(&device_property_dvdrw_unlabelled_when_unmountable,
+		G_TYPE_BOOLEAN, "dvdrw_unlabelled_when_unmountable",
+		"Treat unmountable volumes as unlabelled when reading label");
+
 	device_property_fill_and_register(&device_property_dvdrw_growisofs_command,
 		G_TYPE_BOOLEAN, "dvdrw_growisofs_command",
 		"The location of the growisofs command used to write the DVD-RW");
@@ -225,6 +238,11 @@ dvdrw_device_class_init (DvdRwDeviceClass *c)
 		PROPERTY_ACCESS_GET_MASK | PROPERTY_ACCESS_SET_BEFORE_START,
 		device_simple_property_get_fn,
 		dvdrw_device_set_keep_cache_fn);
+
+	device_class_register_property(device_class, PROPERTY_DVDRW_UNLABELLED_WHEN_UNMOUNTABLE,
+		PROPERTY_ACCESS_GET_MASK | PROPERTY_ACCESS_SET_BEFORE_START,
+		device_simple_property_get_fn,
+		dvdrw_device_set_unlabelled_when_unmountable_fn);
 
 	device_class_register_property(device_class, PROPERTY_DVDRW_GROWISOFS_COMMAND,
 		PROPERTY_ACCESS_GET_MASK | PROPERTY_ACCESS_SET_BEFORE_START,
@@ -302,6 +320,17 @@ dvdrw_device_set_keep_cache_fn(Device *dself, DevicePropertyBase *base,
 	DvdRwDevice *self = DVDRW_DEVICE(dself);
 
 	self->keep_cache = g_value_get_boolean(val);
+
+	return device_simple_property_set_fn(dself, base, val, surety, source);
+}
+
+static gboolean
+dvdrw_device_set_unlabelled_when_unmountable_fn(Device *dself, DevicePropertyBase *base,
+	GValue *val, PropertySurety surety, PropertySource source)
+{
+	DvdRwDevice *self = DVDRW_DEVICE(dself);
+
+	self->unlabelled_when_unmountable = g_value_get_boolean(val);
 
 	return device_simple_property_set_fn(dself, base, val, surety, source);
 }
@@ -385,7 +414,15 @@ dvdrw_device_read_label(Device *dself)
 	status = mount_disc(self);
 	if (status != DEVICE_STATUS_SUCCESS)
 	{
-		return status;
+		/* Not mountable. May be freshly formatted or corrupted, drive may be empty. */
+		if (self->unlabelled_when_unmountable)
+		{
+			return DEVICE_STATUS_VOLUME_UNLABELED;
+		}
+		else
+		{
+			return status;
+		}
 	}
 
 	if ((stat(self->data_dir, &dir_status) < 0) && (errno == ENOENT))
