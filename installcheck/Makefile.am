@@ -10,6 +10,7 @@ common_tests = \
 	Amanda_Archive \
 	Amanda_Config \
 	Amanda_Debug \
+	Amanda_IPC_Binary \
 	Amanda_IPC_LineProtocol \
 	Amanda_MainLoop \
 	Amanda_Header \
@@ -19,7 +20,8 @@ common_tests = \
 
 client_tests = \
 	amgtar \
-	ampgsql
+	ampgsql \
+	amraw
 
 server_tests = \
 	Amanda_Changer \
@@ -70,6 +72,10 @@ restore_tests = \
 mock_tests = \
 	mock_mtx
 
+ndmp_tests = \
+	Amanda_Device_ndmp \
+	Amanda_NDMP
+
 # mock scripts
 mocks = \
 	mock/mtx
@@ -109,6 +115,13 @@ if WANT_CLIENT
 if WANT_RESTORE
 tests += $(restore_tests)
 endif
+endif
+endif
+
+# tests for NDMP require a server and NDMP
+if WANT_NDMP
+if WANT_SERVER
+tests += $(ndmp_tests)
 endif
 endif
 

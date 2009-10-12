@@ -1058,7 +1058,7 @@ struct ndm_session_param {
 struct proxy_channel {
     int sock;
     struct ndmchan ndm;
-    ipc_binary_channel_t ipc;
+    ipc_binary_channel_t *ipc;
 };
 
 struct ndm_session {
@@ -1087,14 +1087,18 @@ struct ndm_session {
 	NDM_FLAG_DECL(conn_authorized)
 	NDM_FLAG_DECL(md5_challenge_valid)
 
-	/* ndmp-proxy-specific additions  to the session state */
 	int			connect_status;
 
-	int			proxy_port;
-	struct ndmchan		stdin_chan;
+	/* ndmp-proxy-specific additions  to the session state */
+	gboolean		proxy_starting; /* true if waiting for first connection */
+	int			proxy_connections; /* number of extant connections */
 	struct ndmchan		listen_chan; /* listening socket */
+
 	struct proxy_channel	*proxy_device_chan;
+	gboolean		device_open;
+
 	struct proxy_channel	*proxy_application_chan;
+
 	struct proxy_channel	*proxy_changer_chan;
 
 #ifdef NDMOS_MACRO_SESSION_ADDITIONS
@@ -1107,7 +1111,7 @@ struct ndm_session {
 extern int	ndma_client_session (struct ndm_session *sess);
 extern int	ndma_server_session (struct ndm_session *sess,
 			int control_sock);
-extern int	ndma_daemon_session (struct ndm_session *sess);
+extern int	ndma_daemon_session (struct ndm_session *sess, int port);
 extern int	ndma_session_quantum (struct ndm_session *sess,
 			int max_delay_secs);
 extern int	ndma_session_initialize (struct ndm_session *sess);

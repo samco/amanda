@@ -143,7 +143,7 @@ ndma_server_session (struct ndm_session *sess, int control_sock)
 
 
 int
-ndma_daemon_session (struct ndm_session *sess)
+ndma_daemon_session (struct ndm_session *sess, int port)
 {
 	int			listen_sock;
 	int			conn_sock, len, rc;
@@ -157,7 +157,7 @@ ndma_daemon_session (struct ndm_session *sess)
 
 	ndmos_condition_listen_socket (sess, listen_sock);
 
-	NDMOS_MACRO_SET_SOCKADDR(&sa, 0, NDMPPORT);
+	NDMOS_MACRO_SET_SOCKADDR(&sa, 0, port);
 
 	if (bind (listen_sock, &sa, sizeof sa) < 0) {
 		perror ("bind");
@@ -311,8 +311,6 @@ ndma_session_quantum (struct ndm_session *sess, int max_delay_secs)
 	/*
 	 * Add proxy channel to channel table
 	 */
-	if (sess->stdin_chan.fd > -1) /* stdin is 0 */
-		chtab[n_chtab++] = &sess->stdin_chan;
 	if (sess->listen_chan.fd > 0)
 		chtab[n_chtab++] = &sess->listen_chan;
 	if (sess->proxy_device_chan && sess->proxy_device_chan->ndm.fd > 0)
@@ -359,7 +357,8 @@ ndma_session_quantum (struct ndm_session *sess, int max_delay_secs)
 	}
 
 	/*
-	 * Dispatch proxy activity
+	 * Dispatch proxy activity (this ends up doing nothing when running
+	 * as ndmjob)
 	 */
 	ndma_dispatch_proxy(sess);
 

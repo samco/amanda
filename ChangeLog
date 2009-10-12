@@ -1,3 +1,128 @@
+2009-10-09  Jean-Louis Martineau <martineau@zmanda.com>
+	Revert previous patch.
+
+2009-10-09  Jean-Louis Martineau <martineau@zmanda.com>
+	* common-src/alloc.c: Increae to MAX_VSTRALLOC_ARGS to 40.
+	* common-src/conffile.c: Add data_path
+	* common-src/conffile.h: Add data-path
+	* common-src/ndmp-proxy.c: Improve.
+	* common-src/ndmp-proxy.h: Improve.
+	* device-src/device.c (device_start_dump, device_finish_dump
+			       device_write_from_data_path) New method.
+	* device-src/device.h (device_start_dump, device_finish_dump
+			       device_write_from_data_path) New method.
+	* device-src/ndmp-device.c: Improve
+	* device-src/xfer-dest-taper.c: data-path
+	* device-src/xfer-device.h: data-path
+	* ndmp-src/Makefile.am (ndmp_proxy_SOURCES): Add files.
+	* ndmp-src/ndma_comm_proxy.c: Improve.
+	* ndmp-src/ndma_comm_session.c: #include "ndmjob.h"
+	* ndmp-src/ndmjob_main.c: Open debug file.
+	* ndmp-src/ndml_log.c: Check for deliver..
+	* perl/Amanda/Config.swg: Add data-path
+	* perl/Amanda/Device.swg: Add new device api
+	* perl/Amanda/Taper/Scribe.pm: data-path
+	* perl/Amanda/XferServer.swg: data-path
+	* server-src/amadmin.c: print data-path
+	* server-src/amcheck.c: data-path and xml_application change
+	* server-src/amindexd.c: xml_application change
+	* server-src/diskfile.c: new xml_application
+	* server-src/diskfile.h: xml_application prototype change.
+	* server-src/driver.c: data-path
+	* server-src/driverio.c: data-path
+	* server-src/driverio.h (taper_device): new global variable.
+	* server-src/dumper.c: data-path
+	* server-src/planner.c: xml_application change
+	* server-src/taper.pl: data-path
+
+2009-10-08  Dustin J. Mitchell <dustin@zmanda.com>
+	* perl/Amanda/IPC/Binary.pod: finish docs
+
+2009-10-08  Dustin J. Mitchell <dustin@zmanda.com>
+	* common-src/ipc-binary.h common-src/ipc-binary.c: many fixes
+	* perl/Makefile.am perl/Amanda/IPC/Binary.swg: perl interface to
+	  ipc-binary
+	* installcheck/Makefile.am installcheck/Amanda_IPC_Binary.pl: checks
+	* perl/Amanda/IPC/Binary.pod: stub documentation
+	* perl/Amanda/IPC/LineProtocol.pm: whitespace
+
+2009-10-08  Dustin J. Mitchell <dustin@zmanda.com>
+	* device-src/ndmp-device.c ndmp-src/ndma_comm_proxy.c
+	  ndmp-src/ndmjob_args.c: tweaks suggested by Nikolas Coukouma
+	  <atrus@zmanda.com>
+
+2009-10-08  Dustin J. Mitchell <dustin@zmanda.com>
+	* common-src/ndmp-proxy.c common-src/ndmp-proxy.h: separate use and
+	  pass parameters
+	* device-src/ndmp-device.c: bugfixes; open and close the conneciton
+	  for each service request, to avoid deadlocking the proxy
+	* installcheck/Amanda_Device_ndmp.pl: check the NDMP device against the
+	  ndmjob tape simulator
+	* installcheck/Installcheck/Mock.pm: add run_ndmjob
+	* installcheck/Makefile.am: new checks
+	* ndmp-src/ndma_comm_proxy.c: formulate the agent string better
+	* ndmp-src/ndma_comm_session.c ndmp-src/ndmagents.h: daemon should take a port
+	* ndmp-src/ndmjob.h: p_port
+	* ndmp-src/ndmjob_args.c: add -p PORT
+	* ndmp-src/ndmjob_main.c: use -p PORT
+	* ndmp-src/ndmp-proxy_main.c: listen for more than one incoming
+	  connection
+
+2009-10-07 Dan Locks <dwlocks@zmanda.com>
+	*  packaging/deb/control: add mailx|bsd-mailx (also missing
+	   |gnuplot-nox)
+
+2009-10-07  Jean-Louis Martineau <martineau@zmanda.com>
+	* server-src/diskfile.c: Fix initialization of xml_app.result.
+
+2009-10-06  Dustin J. Mitchell <dustin@zmanda.com>
+	* perl/Amanda/Config.swg common-src/conffile.c common-src/conffile.h:
+	  remove ndmp-proxy-log-file and ndmp-proxy-debug-level
+	* man/xml-source/amanda.conf.5.xml: document ndmp-proxy-port
+	* common-src/ipc-binary.h: don't recommend static allocation
+	* common-src/ndmp-proxy.c common-src/ndmp-proxy.h: start the proxy on
+	  demand; it will shut down when all of the connections are closed
+	* installcheck/Amanda_NDMP.pl: check Amanda::NDMP
+	* installcheck/Installcheck.pm: add get_unused_port()
+	* installcheck/Makefile.am: new check
+	* ndmp-src/Makefile.am ndmp-src/ndma_comm_proxy.c
+	  ndmp-src/ndma_comm_session.c ndmp-src/ndmagents.h ndmp-src/ndmjob.h
+	  ndmp-src/ndmjob_args.c ndmp-src/ndmjob_job.c ndmp-src/ndmjob_main.c
+	  ndmp-src/ndmjob_main_util.c ndmp-src/ndmp-proxy_main.c: split the NDMP
+	  proxy into a different executable, and reference count the connections
+	  to it
+	* perl/Makefile.am perl/Amanda/NDMP.swg: rename and SWIG the new interface
+	* perl/Amanda/NDMP.pod: add POD
+	* server-src/amlabel.pl server-src/amcheck-device.pl: remove
+	  ndmp_stop_proxy()
+
+2009-10-06  Paul C. Mantz <pcmantz@zmanda.com>
+	* perl/Amanda/Reporter.pm: added log handling of amdump and
+	amflush
+	* installcheck/Amanda_Report.pl: regression tests
+
+2009-10-06  Jean-Louis Martineau <martineau@zmanda.com>
+	* installcheck/amraw.pl: Use File::Path::mkpath.
+
+2009-10-05  Jean-Louis Martineau <martineau@zmanda.com>
+	* application-src/Makefile.am (SCRIPTS_PERL): Add amraw.
+	* application-src/amraw.pl: New application.
+	* installcheck/Makefile.am (client_tests): Add amraw.
+	* installcheck/amraw.pl: Check amraw functionnality.
+	* man/Makefile.am (CLIENT_MAN_PAGES): Add amraw.8.
+	* man/xml-source/amanda-applications.7.xml: Add amraw.8.
+	* man/xml-source/amanda.8.xml: Add amraw.8.
+	* man/xml-source/amraw.8.xml: New man page for amraw application.
+	* perl/Amanda/Constants.pm.in: Add DD.
+
+2009-10-05  Paul C. Mantz <pcmantz@zmanda.com>
+	* server-src/reporter.c: exit code 0 with no output format
+	specified, fixed default output destination
+
+2009-10-02  Jean-Louis Martineau <martineau@zmanda.com>
+	* common-src/debug.c (msg_timestamp): Print time in human readable
+					      format.
+
 2009-10-01  Dustin J. Mitchell <dustin@zmanda.com>
 	* device-src/ndmp-device.c:  remove some includes, remove recycle and
 	  erase, streaming desired, close the tape service on finish(), rewind

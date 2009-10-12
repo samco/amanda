@@ -86,6 +86,7 @@ char *help_text[] = {
 	"  -n       -- no-op, just show how args were handled",
 	"  -v       -- verbose, same messages as -d1 to standard out",
 	"  -S       -- Perform DATA listen and MOVER CONNECT",
+	"  -p PORT  -- NDMP port to listen on (for -o daemon)",
 	"  -o no-time-stamps -- log w/o time stamps, makes diff(1)s easier",
 	"  -o config-file=PATH",
 	"           -- set config file ($NDMJOB_CONFIG, /usr/local/etc/ndmjob.conf)",
@@ -163,7 +164,7 @@ process_args (int argc, char *argv[])
 	if (argc < 2)
 		usage();
 
-	o_config_file = "./ndmjob.conf";
+	o_config_file = g_strdup_printf("%s/ndmjob.conf", amdatadir);
 	if ((p = getenv ("NDMJOB_CONF")) != 0) {
 		o_config_file = p;
 	}
@@ -226,18 +227,24 @@ process_args (int argc, char *argv[])
 		break;
 
 	    case 'b':	/* -b N -- block size in 512-byte records (20) */
-		b_bsize = atoi(optarg);
-		if (b_bsize < 1 || b_bsize > 200) {
-			error_byebye ("bad -b option");
-		}
+            {
+                long b = strtol(optarg, NULL, 10);
+                if (b < 1 || b > 200 || (!b && EINVAL == errno)) {
+                    error_byebye ("bad -b option");
+                }
+                b_bsize = (int) b;
 		break;
+            }
 
-	    case 'y':	/* -y fd -- file descriptor to listen to */
-		y_fd = atoi(optarg);
-		if (y_fd < 1 || y_fd > 32768) {
-			error_byebye ("bad -y option");
-		}
+	    case 'p':	/* -p N -- port number for daemon mode (10000) */
+            {
+                long p = strtol(optarg, NULL, 10);
+                if (p < 1 || p > 65535 || (!p && EINVAL == errno)) {
+                    error_byebye ("bad -p option");
+                }
+                p_ndmp_port = (int) p;
 		break;
+            }
 
 	    case 'C':	/* -C DIR   -- change directory on data agent */
 #if 0
@@ -567,7 +574,6 @@ struct ndmp_enum_str_table	mode_long_name_table[] = {
 #endif /* !NDMOS_OPTION_NO_CONTROL_AGENT */
 #ifndef NDMOS_EFFECT_NO_SERVER_AGENTS
 	{ "daemon",		'D' },
-	{ "proxy",		'y' },
 #endif /* !NDMOS_EFFECT_NO_SERVER_AGENTS */
 	{ 0 }
 };
@@ -605,8 +611,6 @@ handle_long_option (char *str)
 			case NDM_JOB_OP_IMPORT_TAPE:
 				o_to_addr = atoi(value);
 				break;
-			case 'y':
-				o_proxy = atoi(value);
 			}
 		}
 	} else if (strcmp (name, "swap-connect") == 0) {
