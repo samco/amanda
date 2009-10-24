@@ -157,7 +157,7 @@ static gboolean
 check_readable(DvdRwDevice *self);
 
 static DeviceStatusFlags
-mount_disc(DvdRwDevice *self);
+mount_disc(DvdRwDevice *self, gboolean report_error);
 
 static void
 unmount_disc(DvdRwDevice *self);
@@ -411,7 +411,7 @@ dvdrw_device_read_label(Device *dself)
 	if (device_in_error(dself)) return DEVICE_STATUS_DEVICE_ERROR;
 	if (!check_readable(self)) return DEVICE_STATUS_DEVICE_ERROR;
 
-	status = mount_disc(self);
+	status = mount_disc(self, !self->unlabelled_when_unmountable);
 	if (status != DEVICE_STATUS_SUCCESS)
 	{
 		/* Not mountable. May be freshly formatted or corrupted, drive may be empty. */
@@ -457,7 +457,7 @@ dvdrw_device_start(Device *dself, DeviceAccessMode mode, char *label, char *time
 
 	if (mode == ACCESS_READ)
 	{
-		if (mount_disc(self) != DEVICE_STATUS_SUCCESS)
+		if (mount_disc(self, TRUE) != DEVICE_STATUS_SUCCESS)
 		{
 			return FALSE;
 		}
@@ -679,10 +679,11 @@ check_readable(DvdRwDevice *self)
 }
 
 static DeviceStatusFlags
-mount_disc(DvdRwDevice *self)
+mount_disc(DvdRwDevice *self, gboolean report_error)
 {
+	Device *dself = DEVICE(self);
 	gchar *mount_argv[] = { NULL, self->mount_point, NULL };
-	gint status;
+	DeviceStatusFlags status;
 
 	if (self->mount_command == NULL)
 	{
@@ -694,7 +695,22 @@ mount_disc(DvdRwDevice *self)
 	}
 
 	g_debug("Mounting media at %s", self->mount_point);
-	return execute_command(self, mount_argv, &status);
+	status = execute_command(report_error ? self : NULL, mount_argv, NULL);
+	if (status != DEVICE_STATUS_SUCCESS)
+	{
+		/* Wait a few seconds and try again - The tray may still be out after burning */
+		sleep(3);
+		if (execute_command(report_error ? self : NULL, mount_argv, NULL) == DEVICE_STATUS_SUCCESS)
+		{
+			/* Clear error */
+			device_set_error(dself, NULL, DEVICE_STATUS_SUCCESS);
+			return DEVICE_STATUS_SUCCESS;
+		}
+		else
+		{
+			return status;
+		}
+	}
 }
 
 static void
@@ -719,19 +735,52 @@ static DeviceStatusFlags
 execute_command(DvdRwDevice *self, gchar **argv, gint *result)
 {
 	Device *dself = DEVICE(self);
+	gchar *std_output = NULL;
+	gchar *std_error = NULL;
+	gint errnum = 0;
 	GError *error = NULL;
-	gint errnum;
+	gboolean success;
+	int signum = 0;
 
-	g_spawn_sync(NULL, argv, NULL, G_SPAWN_STDOUT_TO_DEV_NULL | G_SPAWN_SEARCH_PATH,
-		NULL, NULL, NULL, NULL, &errnum, &error);
+	g_debug("Executing: %s", argv[0]);
+
+	g_spawn_sync(NULL, argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL,
+		&std_output, &std_error, &errnum, &error);
+
+	g_debug("Execution complete");
+
+	if (WIFSIGNALED(errnum))
+	{
+		success = FALSE;
+		signum = WTERMSIG(errnum);
+	}
+	else if (WIFEXITED(errnum))
+	{
+	    success = (WEXITSTATUS(errnum) == 0);
+	}
+	else
+	{
+	    success = FALSE;
+	}
+
 	if (error || (errnum != 0))
 	{
-		gchar *error_message = vstrallocf(_("DVDRW device cannot execute '%s': %s (status %d)"),
-			argv[0], error ? error->message : _("Unknown error"), errnum);
+		gchar *error_message = vstrallocf(_("DVDRW device cannot execute '%s': %s (status: %d) (stderr: %s)"),
+			argv[0], error ? error->message : _("Unknown error"), errnum, std_error ? std_error: "No output");
 
 		if (dself != NULL)
 		{
 			device_set_error(dself, error_message, DEVICE_STATUS_DEVICE_ERROR);
+		}
+
+		if (std_output)
+		{
+			g_free(std_output);
+		}
+
+		if (std_error)
+		{
+			g_free(std_error);
 		}
 
 		if (error)
