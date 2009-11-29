@@ -14,7 +14,7 @@
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  *
- * Contact information: Zmanda Inc., 465 N Mathlida Ave, Suite 300
+ * Contact information: Zmanda Inc., 465 S. Mathilda Ave., Suite 300
  * Sunnyvale, CA 94085, USA, or: http://www.zmanda.com
  */
 
@@ -141,7 +141,7 @@ the file for you!
 
 This source reads data from a holding file (see L<Amanda::Holding>).
 If the transfer only consists of a C<Amanda::Xfer::Source::Holding>
-and an C<Amanda::Xfer::Dest::Taper> (with no filters), then the source
+and an C<Amanda::Xfer::Dest::Taper::Splitter> (with no filters), then the source
 will call the destination's C<cache_inform> method so that it can use
 holding chunks for a split-part cache.
 
@@ -158,11 +158,11 @@ check for correct output.
 
   Amanda::Xfer::Source::Pattern->new($length, $pattern);
 
-=head3 Amanda::Xfer::Source::Taper (SERVER ONLY)
-
 This source provides I<length> bytes containing copies of
 I<pattern>. If I<length> is zero, the source provides an unlimited
 number of bytes.
+
+=head3 Amanda::Xfer::Source::Taper (SERVER ONLY)
 
   Amanda::Xfer::Source::Taper->new()
 
@@ -182,6 +182,17 @@ C<Amanda::Xfer::Msg>, with the following keys:
 
 Call C<start_part> with C<$device = undef> to indicate that there are no more
 parts.
+
+=head3 Amanda::Xfer::Source::DirectTCPListen
+
+  Amanda::Xfer::Source::DirectTCPListen->new()
+
+This source is for use when the xfer data will come in via DirectTCP.  Set up
+the transfer, and after starting it, call its C<get_addrs> method to get an
+arrayref of ip/port pairs, e.g., C<[ "192.168.4.5", 9924 ]>, all of which
+are listening for an incoming data connection.
+
+  my $addrs = $src->get_addrs();
 
 =head2 Transfer Filters
 
@@ -214,6 +225,16 @@ writing (C<< $device->start_file(..) >>).  No more than C<$max_memory>
 will be used for buffers.  Use zero for the default buffer size.  On
 completion of the transfer, the file will be finished.
 
+=head3 Amanda::Xfer::Dest::Buffer
+
+  Amanda::Xfer::Dest::Buffer->new($max_size);
+
+This destination records data into an in-memory buffer which can grow up to
+C<$max_size> bytes.  The buffer is available with the C<get> method, which
+returns a copy of the buffer as a perl scalar:
+
+    my $buf = $xdb->get();
+
 =head3 Amanda::Xfer::Dest::Fd
 
   Amanda::Xfer::Dest::Fd->new(fileno($fh));
@@ -231,27 +252,28 @@ nonzero, then the element will validate that it receives the data that
 C<Amanda::Xfer::Source::Random> produced with the same seed.  No
 validation is performed if C<$seed> is zero.
 
-=head3 Amanda::Xfer::Dest::Taper (SERVER ONLY)
+=head3 Amanda::Xfer::Dest::Taper::Splitter (SERVER ONLY)
 
-  Amanda::Xfer::Dest::Taper->new($max_memory, $part_size,
-			    $use_mem_cache, $disk_cache_dirname);
+  Amanda::Xfer::Dest::Taper::Splitter->new($first_device, $max_memory,
+                        $part_size, $use_mem_cache, $disk_cache_dirname);
 
-This is C<Amanda::Xfer::Dest::Device>'s big cousin.  C<Taper> allows a
+This is C<Amanda::Xfer::Dest::Device>'s big cousin.  This class allows a
 single transfer to write to multiple files (parts) on a device, and
 even spread those parts over multiple devices, without interrupting
 the transfer itself.  It caches data from each part in one of a
 variety of ways, and supports "rewinding" to retry a failed part
 (e.g., one that does not fit on a device).
 
-The desired part size is C<$part_size>, although this value will be
-rounded up internally as necessary.  If C<$use_mem_cache> is true,
-each part will be cached in memory (using C<$part_size> bytes of
-memory; plan accordingly!).  If C<$disk_cache_dirname> is defined,
-then each part will be cached on-disk in a file in this directory.  It
-is an error to specify both in-memory and on-disk caching.  If neither
-option is specified, the element will operate successfully, but will
-not be able to retry a part unless C<cache_inform> has been used
-properly (see below).
+The C<$first_device> is used to calculate some internal constants, notably the
+slab size, based on the device characteristics.  The device should be
+configured, but need not be started yet.  The desired part size is
+C<$part_size>, although this value will be rounded up internally as necessary.
+If C<$use_mem_cache> is true, each part will be cached in memory (using
+C<$part_size> bytes of memory; plan accordingly!).  If C<$disk_cache_dirname>
+is defined, then each part will be cached on-disk in a file in this directory.
+It is an error to specify both in-memory and on-disk caching.  If neither
+option is specified, the element will operate successfully, but will not be
+able to retry a part unless C<cache_inform> has been used properly (see below).
 
 When a transfer using this element is first started, nothing happens
 until the element's C<start_part> method is called:
@@ -264,19 +286,24 @@ $device->start_file(..) >> has already been called).  If
 C<$retry_part> is true, then the previous, unsuccessful part will be
 retried.
 
-As each part is completed, the element sends an C<$XMSG_DONE>
+As each part is completed, the element sends an C<$XMSG_PART_DONE>
 C<Amanda::Xfer::Msg>, with the following keys:
 
- successful true if the whole part was written
- eof	    recipient should not call start_part
+ successful true if the part was written successfully
+ eof	    recipient should not call start_part again
+ eom        this volume is at EOM; a new volume is required
  size	    bytes written to volume
  duration   time spent writing, not counting changer ops, etc.
  partnum    the zero-based number of this part in the overall dumpfile
  fileno     the on-media file number used for this part, or 0 if no file
             was used
 
-If C<eof> is not true, then C<start_part> should be called again, with
-C<$retry_part = !successful>.
+If C<eom> is true, then the caller should find a new volume before
+continuing.  If C<eof> is not true, then C<start_part> should be called
+again, with C<$retry_part = !successful>.  Note that it is possible
+for some destinations to write a portion of a part successfully,
+but still stop at EOM.  That is, C<eom> does not necessarily imply
+C<!successful>.
 
 If neither the memory nor disk caches are in use, but the dumpfile is
 available on disk, then the C<cache_inform> method allows the element
@@ -287,13 +314,18 @@ purposes.
 
   $dest->cache_inform($filename, $offset, $length);
 
-This function indictes that C<$filename> contains C<$length> bytes of
+This function indicates that C<$filename> contains C<$length> bytes of
 data, beginning at offset C<$offset> from the beginning of the file.
 These bytes are assumed to follow immediately after any bytes
 previously specified to C<cache_inform>.  That is, no gaps or overlaps
 are allowed in the data stream described to C<cache_inform>.
 Furthermore, the location of each byte must be specified to this
 method I<before> it is sent through the transfer.
+
+  $dest->get_part_bytes_written()
+
+This function returns the number of bytes written for the current part
+to the device.
 
 =head1 Amanda::Xfer::Msg objects
 
@@ -323,6 +355,9 @@ The version of the message.  This is used to support extensibility of
 the protocol.
 
 =back
+
+Additional keys are described in the documentation for the elements
+that use them.  All keys are listed in C<xfer-src/xmsg.h>.
 
 =cut
 

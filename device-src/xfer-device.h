@@ -15,7 +15,7 @@
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  *
- * Contact information: Zmanda Inc., 465 N Mathlida Ave, Suite 300
+ * Contact information: Zmanda Inc., 465 S. Mathilda Ave., Suite 300
  * Sunnyvale, CA 94085, USA, or: http://www.zmanda.com
  */
 
@@ -52,7 +52,9 @@ XferElement *xfer_dest_device(
     Device *device,
     size_t max_memory);
 
-/* class declaration for XferDestTaper */
+/*
+ * class declaration for XferDestTaper (an abstract base class)
+ */
 
 GType xfer_dest_taper_get_type(void);
 #define XFER_DEST_TAPER_TYPE (xfer_dest_taper_get_type())
@@ -62,23 +64,20 @@ GType xfer_dest_taper_get_type(void);
 #define IS_XFER_DEST_TAPER(obj) G_TYPE_CHECK_INSTANCE_TYPE((obj), xfer_dest_taper_get_type ())
 #define XFER_DEST_TAPER_GET_CLASS(obj) G_TYPE_INSTANCE_GET_CLASS((obj), xfer_dest_taper_get_type(), XferDestTaperClass)
 
-/* Constructor for XferDestTaper.  Note that this object will not write any data until
- * you call one of the methods below.
- *
- * @param max_memory: total amount of memory to use for buffers, or zero
- *                    for a reasonable default.
- * @param part_size: the desired size of each part
- * @param use_mem_cache: if true, use the memory cache
- * @param disk_cache_dirname: if not NULL, this is the directory in which the disk
- *		      cache should be created
- * @return: new element
- */
-XferElement *
-xfer_dest_taper(
-    size_t max_memory,
-    guint64 part_size,
-    gboolean use_mem_cache,
-    const char *disk_cache_dirname);
+typedef struct XferDestTaper_ {
+    XferElement __parent__;
+} XferDestTaper;
+
+typedef struct {
+    XferElementClass __parent__;
+
+    /* see xfer-device.h for details of these methods */
+    void (*start_part)(XferDestTaper *self, gboolean retry_part, Device *device,
+		       dumpfile_t *header);
+    void (*cache_inform)(XferDestTaper *self, const char *filename, off_t offset,
+			 off_t length);
+    guint64 (*get_part_bytes_written)(XferDestTaper *self);
+} XferDestTaperClass;
 
 /* start writing the next part to the given device.  The device should be open,
  * but the new file not started.  This will abort if called with an element
@@ -113,6 +112,38 @@ void xfer_dest_taper_cache_inform(
     const char *filename,
     off_t offset,
     off_t length);
+
+/* Return the number of bytes written for the current part.
+ *
+ * @param self: the XferDestTaper object
+ */
+guint64 xfer_dest_taper_get_part_bytes_written(
+    XferElement *self);
+
+/* Constructor for XferDestTaperSplitter, which writes data to devices block by
+ * block and handles caching and splitting parts.
+ *
+ * @param first_device: the first device that will be used with this xfer, used
+ *                      to calculate some internal parameters
+ * @param max_memory: total amount of memory to use for buffers, or zero
+ *                    for a reasonable default.
+ * @param part_size: the desired size of each part
+ * @param use_mem_cache: if true, use the memory cache
+ * @param disk_cache_dirname: if not NULL, this is the directory in which the disk
+ *		      cache should be created
+ * @return: new element
+ */
+XferElement *
+xfer_dest_taper_splitter(
+    Device *first_device,
+    size_t max_memory,
+    guint64 part_size,
+    gboolean use_mem_cache,
+    const char *disk_cache_dirname);
+
+/*
+ * XferSourceTaper
+ */
 
 /* Create a new XferSourceTaper object.  Like XferDestTaper instances, this object
  * will not start transferring data until xfer_source_taper_start_part is called to

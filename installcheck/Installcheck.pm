@@ -14,7 +14,7 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
 #
-# Contact information: Zmanda Inc, 465 S Mathlida Ave, Suite 300
+# Contact information: Zmanda Inc, 465 S. Mathilda Ave., Suite 300
 # Sunnyvale, CA 94086, USA, or: http://www.zmanda.com
 
 package Installcheck;
@@ -65,11 +65,14 @@ use strict;
 use warnings;
 use Socket;
 
+use Amanda::Util;
+
 our $TMP = "$AMANDA_TMPDIR/installchecks";
 
 # run this just before the script actually executes
 # (not during syntax checks)
 INIT {
+    Amanda::Util::set_pname("$0");
     mkpath($TMP);
 }
 
@@ -95,6 +98,7 @@ sub get_unused_port {
 	next unless socket(SOCK, PF_INET, SOCK_STREAM, $tcp);
 	next unless setsockopt(SOCK, SOL_SOCKET, SO_REUSEADDR, pack("l", 1));
 	next unless bind(SOCK, sockaddr_in($port, INADDR_ANY));
+	close(SOCK);
 
 	# it passed the gauntlet of tests, so the port is good
 	push @used_ports, $port;

@@ -13,11 +13,8 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
 #
-# Contact information: Zmanda Inc., 465 N Mathlida Ave, Suite 300
+# Contact information: Zmanda Inc., 465 S. Mathilda Ave., Suite 300
 # Sunnyvale, CA 94085, USA, or: http://www.zmanda.com
-#
-# Contact information: Zmanda Inc, 465 S Mathlida Ave, Suite 300
-# Sunnyvale, CA 94086, USA, or: http://www.zmanda.com
 
 package Amanda::IPC::LineProtocol;
 =head1 NAME
@@ -67,10 +64,10 @@ Define your protocol:
     $proto = MyProtocol->new(
 	    rx_fh => $input_fh,
 	    tx_fh => $output_fh,
-	    message_cb => $message_cb,
-	    MyProtocol::PING => $ping_cb);
+	    message_cb => $message_cb);
 
-    # or, to add callbacks afterward
+    # and add callbacks
+    $proto->set_message_cb(MyProtocol::PING, $ping_cb);
     $proto->set_message_cb(MyProtocol::PONG, $pong_cb);
 
     # or send messages to an object, with method names based on
@@ -194,8 +191,8 @@ C<CollegeProtocol> running on that socket:
   my $proto = CollegeProtocol->new(
     rx_fh => $sockh,
     tx_fh => $sockh,
-    CollegeProtocol::PIZZA_DELIVERY => $pizza_delivery_cb,
   );
+  $proto->set_message_cb(CollegeProtocol::PIZZA_DELIVERY, $pizza_delivery_cb);
 
 For protocols with a lot of message types, it may be useful to have the
 protocol call methods on an object.  This is done with the C<message_obj>
@@ -211,6 +208,10 @@ the object has been crated:
 
   $proto->set_message_cb(CollegeProtocol::MIDTERM,
     sub { ... });
+
+The constructor also takes a 'debug' argument; if given, then all incoming and
+outgoing messages will be written to the debug log with this argument as
+prefix.
 
 All message callbacks have the same signature:
 
@@ -299,6 +300,7 @@ sub new {
 
     my $self = bless {
 	stopped => 0,
+	debug => $params{'debug'},
 
 	rx_fh => $params{'rx_fh'},
 	rx_fh_tty => 0,
@@ -318,14 +320,6 @@ sub new {
 	# a ref to the existing structure
 	msgspecs => $msgspecs_by_protocol{$class},
     }, $class;
-
-    # strip the known values from %params and use the rest as
-    # command callbacks
-    delete $params{'rx_fh'};
-    delete $params{'tx_fh'};
-    delete $params{'message_cb'};
-    delete $params{'message_obj'};
-    $self->{'cmd_cbs'} = \%params;
 
     # set nonblocking mode on both file descriptor, but only for non-tty
     # handles -- non-blocking tty's don't work well at all.
@@ -409,7 +403,9 @@ sub send {
 	}
     }
 
-    my $line = join(" ", map { Amanda::Util::quote_string("$_") } @line) . "\n";
+    my $line = join(" ", map { Amanda::Util::quote_string("$_") } @line);
+    debug($self->{'debug'} . " >> $line") if ($self->{'debug'});
+    $line .= "\n";
 
     ++$self->{'tx_outstanding_writes'};
     my $write_done_cb = make_cb(write_done_cb => sub {
@@ -521,6 +517,8 @@ sub _incoming_line {
 
     $line =~ s/\n//g;
     return unless $line;
+
+    debug($self->{'debug'} . " << $line") if ($self->{'debug'});
 
     # turn the line into a list of strings..
     my @line = Amanda::Util::split_quoted_strings($line);

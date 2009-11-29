@@ -13,7 +13,7 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
 #
-# Contact information: Zmanda Inc., 465 S Mathlida Ave, Suite 300
+# Contact information: Zmanda Inc., 465 S. Mathilda Ave., Suite 300
 # Sunnyvale, CA 94085, USA, or: http://www.zmanda.com
 
 package Amanda::Report;
@@ -94,6 +94,12 @@ If the optional argument C<$field> is provided, that field in the
 indicated program is returned.  The returned value is a reference to
 the internal C<Amanda::Report> data structure and will in turn modify
 the C<$report> object.
+
+=head2 if ( $report->get_flag($flag) ) { ... }
+
+This method accesses a number of flags that represent the state of the
+dump.  A true value is returned if the flag is set, and undef
+otherwise.
 
 =head1 DATA DESCRIPTION
 
@@ -294,6 +300,30 @@ be written.
 
 =back
 
+=head1 FLAGS
+
+During the reading of a logfile, the module will set and unset a
+number of flags to indicate the state of the backup.  These are used
+to indicate the type of backup or the conditions of success.
+
+The following is a list of currently recognized flags:
+
+=over
+
+=item C<got_finish> - This flag is true when the driver finished
+correctly.  It indicates that the dump run has finished and cleaned
+up.
+
+=item C<degraded_mode> - This flag is set if the taper encounters an
+error that forces it into degraded mode.
+
+=item C<amflush_run> - This flag is set if amflush is run instead of planner.
+
+=item C<normal_run> - This flag is set when planner is run.  Its value
+should be opposite of C<amflush_run>.
+
+=back
+
 =cut
 
 
@@ -322,12 +352,25 @@ sub read_file
     $data->{programs} = {};
     $data->{disklist} = {};
     $self->{cache}    = {};
+    $self->{flags}    = {};
 
-    my $logfh = Amanda::Logfile::open_logfile($logfname);
+    my $logfh = Amanda::Logfile::open_logfile($logfname)
+      or die "cannot open $logfname: $!";
 
     while ( my ( $type, $prog, $str ) = Amanda::Logfile::get_logline($logfh) ) {
         $self->read_line( $type, $prog, $str );
     }
+
+    # set post-run flags
+    if (
+        !$self->get_flag("normal_run")
+        && (   ( defined $self->get_program_info("amflush") )
+            && ( scalar %{ $self->get_program_info("amflush") } ) )
+      ) {
+        $self->{flags}{amflush_run} = 1;
+    }
+
+    return;
 }
 
 
@@ -418,6 +461,12 @@ sub get_program_info
       : $self->{data}{programs}{$program};
 }
 
+sub get_flag
+{
+    my ( $self, $flag ) = @_;
+    return $self->{flags}{$flag};
+}
+
 sub _handle_planner_line
 {
     my $self = shift @_;
@@ -431,12 +480,14 @@ sub _handle_planner_line
         return $self->_handle_info_line( "planner", $str );
 
     } elsif ( $type == $L_START ) {
+
+        $self->{flags}{normal_run} = 1;
         return $self->_handle_start_line( "planner", $str );
 
     } elsif ( $type == $L_FINISH ) {
 
         my @info = Amanda::Util::split_quoted_strings($str);
-        $planner->{time} = $info[3];
+        return $planner->{time} = $info[3];
 
     } elsif ( $type == $L_DISK ) {
         return $self->_handle_disk_line( "planner", $str );
@@ -474,7 +525,8 @@ sub _handle_driver_line
     } elsif ( $type == $L_FINISH ) {
 
         my @info = Amanda::Util::split_quoted_strings($str);
-        $driver_p->{time}   = $info[3];
+        $self->{flags}{got_finish} = 1;
+        return $driver_p->{time} = $info[3];
 
     } elsif ( $type == $L_STATS ) {
 
@@ -775,6 +827,8 @@ sub _handle_taper_line
         push @$notes, $str;
 
     } elsif ( $type == $L_ERROR ) {
+
+        $self->{flags}{degraded_mode} = 1;
         return $self->_handle_error_line( "taper", $str );
 
     } elsif ( $type == $L_FAIL ) {

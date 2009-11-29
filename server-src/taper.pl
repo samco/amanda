@@ -14,7 +14,7 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
 #
-# Contact information: Zmanda Inc., 465 S Mathlida Ave, Suite 300
+# Contact information: Zmanda Inc., 465 S. Mathilda Ave., Suite 300
 # Sunnyvale, CA 94086, USA, or: http://www.zmanda.com
 
 use lib '@amperldir@';
@@ -32,7 +32,7 @@ use constant START_TAPER => message("START-TAPER",
 
 use constant PORT_WRITE => message("PORT-WRITE",
     format => [ qw( handle hostname diskname level datestamp splitsize
-		    split_diskbuffer fallback_splitsize ) ],
+		    split_diskbuffer fallback_splitsize data_path ) ],
 );
 
 use constant FILE_WRITE => message("FILE-WRITE",
@@ -94,6 +94,10 @@ use constant PORT => message("PORT",
     format => [ qw( port ) ],
 );
 
+use constant DIRECTTCP_PORT => message("DIRECTTCP-PORT",
+    format => [ qw( port hostport) ],
+);
+
 use constant BAD_COMMAND => message("BAD-COMMAND",
     format => [ qw( message ) ],
 );
@@ -119,6 +123,7 @@ use Amanda::Logfile qw( :logtype_t log_add );
 use Amanda::Xfer;
 use Amanda::Util qw( quote_string );
 use Amanda::Tapelist;
+use File::Temp;
 
 use base qw( Amanda::Taper::Scribe::Feedback );
 
@@ -190,6 +195,7 @@ sub start {
 	tx_fh => *STDOUT,
 	message_cb => $message_cb,
 	message_obj => $self,
+	debug => $Amanda::Config::debug_taper?'driver/taper':'',
     );
 
     my $changer = Amanda::Changer->new();
@@ -211,7 +217,8 @@ sub start {
     my $taperscan = Amanda::Taper::Scan->new(changer => $changer);
     $self->{'scribe'} = Amanda::Taper::Scribe->new(
 	taperscan => $taperscan,
-	feedback => $self);
+	feedback => $self,
+	debug => $Amanda::Config::debug_taper);
 
     # set up a listening socket on an arbitrary port
     my $sock = $self->{'listen_socket'} = IO::Socket::INET->new(
@@ -447,6 +454,7 @@ sub msg_PORT_WRITE {
     $self->_assert_in_state("idle") or return;
     $self->{'state'} = 'writing';
     $self->{'handle'} = $params{'handle'};
+    $self->{'data_path'} = Amanda::Config::data_path_from_string($params{'data_path'});
     $self->{'doing_port_write'} = 1;
 
     # set up so that an incoming connection on the listening socket
@@ -489,6 +497,28 @@ sub msg_PORT_WRITE {
 	# parse the header
 	my $hdr = Amanda::Header->from_string($hdr_buf);
 
+	if ($self->{'data_path'} == $Amanda::Config::DATA_PATH_AMANDA) {
+	    # create temporary file
+	    ($self->{status_fh}, $self->{status_filename}) =
+		File::Temp::tempfile("taper_status_file_XXXXXX",
+				     DIR => $Amanda::Paths::AMANDA_TMPDIR,
+				     UNLINK => 1);
+	    my $disk = $hdr->{disk};
+	    my $qdisk = Amanda::Util::quote_string($disk);
+	    print STDERR "taper: status file $hdr->{name} $qdisk:" . 
+			 "$self->{status_filename}\n";
+	    print {$self->{status_fh}} "0";
+
+	    # create timer callback
+	    $self->{timer} = Amanda::MainLoop::timeout_source(5);
+	    $self->{timer}->set_callback(sub {
+		my $size = $self->{scribe}->get_bytes_written();
+		seek $self->{status_fh}, 0, 0;
+		print {$self->{status_fh}} $size;
+		$self->{status_fh}->flush();
+	    });
+	}
+
 	# and start up the transfer
 	$self->{'incoming_socket'}->blocking(1);
 	my $xfer_src = Amanda::Xfer::Source::Fd->new($self->{'incoming_socket'}->fileno());
@@ -496,8 +526,14 @@ sub msg_PORT_WRITE {
     };
 
     # tell the driver which port we're listening on
-    $self->{'proto'}->send(main::Protocol::PORT,
-	port => $self->{'listen_socket'}->sockport());
+    if ($self->{'data_path'} == $Amanda::Config::DATA_PATH_DIRECTTCP) {
+        $self->{'proto'}->send(main::Protocol::DIRECTTCP_PORT,
+	    port => $self->{'listen_socket'}->sockport(),
+	    hostport => "localhost:33333");
+    } else {
+        $self->{'proto'}->send(main::Protocol::PORT,
+	    port => $self->{'listen_socket'}->sockport());
+    }
 }
 
 sub msg_QUIT {
@@ -572,7 +608,7 @@ sub do_start_xfer {
     $start_xfer_args{'dump_cb'} = sub { $self->dump_cb(@_); };
     $start_xfer_args{'xfer_elements'} = [ $xfer_source ];
     $start_xfer_args{'dump_header'} = $hdr;
-    if ($hdr->{'dumplevel'} ne $params{'level'}
+    if ($hdr->{'dumplevel'} != $params{'level'}
 	or $hdr->{'name'} ne $params{'hostname'}
 	or $hdr->{'disk'} ne $params{'diskname'}) {
 	die("Header of dumpfile does not match FILE_WRITE command");
@@ -659,6 +695,10 @@ sub do_start_xfer {
     $self->{'header'} = $hdr;
     $self->{'header'}->{'totalparts'} = $self->{'nparts'};
 
+    # fix the header type to indicate whether this dumpfile is split
+    $self->{'header'}->{'type'} = ($self->{'nparts'} == 1)?
+		$Amanda::Header::F_DUMPFILE : $Amanda::Header::F_SPLIT_DUMPFILE;
+
     $self->{'scribe'}->start_xfer(%start_xfer_args);
 }
 
@@ -698,6 +738,15 @@ sub dump_cb {
     } elsif ($params{'result'} eq 'FAILED') {
 	$msgtype = main::Protocol::FAILED;
 	$logtype = $L_FAIL;
+    }
+
+    if ($self->{timer}) {
+	$self->{timer}->remove();
+	undef $self->{timer};
+	$self->{status_fh}->close();
+	undef $self->{status_fh};
+	unlink($self->{status_filename});
+	undef $self->{status_filename};
     }
 
     my $stats = $self->make_stats($params{'size'}, $params{'duration'});

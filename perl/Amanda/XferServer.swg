@@ -14,7 +14,7 @@
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  *
- * Contact information: Zmanda Inc., 465 N Mathlida Ave, Suite 300
+ * Contact information: Zmanda Inc., 465 S. Mathilda Ave., Suite 300
  * Sunnyvale, CA 94085, USA, or: http://www.zmanda.com
  */
 
@@ -47,8 +47,9 @@ XferElement *xfer_dest_device(
 XferElement * xfer_source_holding(
     const char *filename);
 
-%newobject xfer_dest_taper;
-XferElement *xfer_dest_taper(
+%newobject xfer_dest_taper_splitter;
+XferElement *xfer_dest_taper_splitter(
+    Device *first_device,
     size_t max_memory,
     guint64 part_size,
     gboolean use_mem_cache,
@@ -65,6 +66,9 @@ void xfer_dest_taper_cache_inform(
     const char *filename,
     off_t offset,
     off_t length);
+
+guint64 xfer_dest_taper_get_part_bytes_written(
+    XferElement *self);
 
 %newobject xfer_source_taper;
 XferElement *xfer_source_taper(void);
@@ -95,9 +99,15 @@ DECLARE_CONSTRUCTOR(Amanda::XferServer::xfer_source_holding)
 
 PACKAGE(Amanda::Xfer::Dest::Taper)
 XFER_ELEMENT_SUBCLASS()
-DECLARE_CONSTRUCTOR(Amanda::XferServer::xfer_dest_taper)
 DECLARE_METHOD(start_part, Amanda::XferServer::xfer_dest_taper_start_part)
 DECLARE_METHOD(cache_inform, Amanda::XferServer::xfer_dest_taper_cache_inform)
+DECLARE_METHOD(get_part_bytes_written, Amanda::XferServer::xfer_dest_taper_get_part_bytes_written)
+
+/* ---- */
+
+PACKAGE(Amanda::Xfer::Dest::Taper::Splitter)
+XFER_ELEMENT_SUBCLASS_OF(Amanda::Xfer::Dest::Taper)
+DECLARE_CONSTRUCTOR(Amanda::XferServer::xfer_dest_taper_splitter)
 
 /* ---- */
 

@@ -13,7 +13,7 @@
 # along with this library; if not, write to the Free Software Foundation,
 # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA.
 #
-# Contact information: Zmanda Inc., 465 S Mathlida Ave, Suite 300
+# Contact information: Zmanda Inc., 465 S. Mathilda Ave., Suite 300
 # Sunnyvale, CA 94086, USA, or: http://www.zmanda.com
 
 package Amanda::Taper::Scribe;
@@ -214,6 +214,10 @@ C<finished_cb>.
     print "ALL DONE!\n";
   });
 
+=head2 GET_BYTES_WRITTEN
+
+The C<get_bytes_written> return the number of bytes written to the device.
+
 =head1 FEEDBACK
 
 The C<Amanda::Taper::Scribe::Feedback> class is intended to be
@@ -305,6 +309,7 @@ sub new {
 
     my $self = {
 	feedback => $params{'feedback'},
+	debug => $params{'debug'},
 	dump_timestamp => undef,
 
 	# device handling, and our current device and reservation
@@ -342,6 +347,7 @@ sub start {
 	    unless exists $params{$rq_param};
     }
 
+    $self->dbg("starting");
     $self->{'dump_timestamp'} = $params{'dump_timestamp'};
     $self->{'devhandling'}->start();
 }
@@ -369,6 +375,8 @@ sub quit {
         # - ensure that the taperscan not be started afterward
         # and isn't required for normal Amanda operation.
     }
+
+    $self->dbg("quitting");
 
     my $cleanup_cb = make_cb(cleanup_cb => sub {
 	my ($error) = @_;
@@ -407,6 +415,8 @@ sub start_xfer {
 	    unless exists $params{$rq_param};
     }
 
+    $self->dbg("start_xfer(split_method=$params{split_method})");
+
     if ($params{'split_method'} ne 'none') {
         croak("required parameter 'part_size' missing")
             unless exists $params{'part_size'};
@@ -431,28 +441,16 @@ sub start_xfer {
         croak("invalid split_method $params{split_method}");
     }
 
-    debug("Amanda::Taper::Scribe using split method $params{split_method}");
+    debug("Amanda::Taper::Scribe beginning a part with split method $params{split_method}");
 
     die "not yet started"
 	unless ($self->{'dump_timestamp'});
     die "xfer already running"
 	if ($self->{'xfer'});
 
-    my $xdt = Amanda::Xfer::Dest::Taper->new(
-	$params{'max_memory'}, $part_size,
-	$use_mem_cache, $disk_cache_dirname);
-
-    my $xfer_elements = $params{'xfer_elements'};
-    my $xfer = Amanda::Xfer->new([ @$xfer_elements, $xdt ]);
-
-    # get the header ready for writing
-    my $dump_header = $params{'dump_header'};
-    $dump_header->{'partnum'} = 1;
-    $dump_header->{'totalparts'} = -1;
-
-    $self->{'xfer'} = $xfer;
-    $self->{'xdt'} = $xdt;
-    $self->{'dump_header'} = $dump_header;
+    $self->{'xfer'} = undef;
+    $self->{'xdt'} = undef;
+    $self->{'dump_header'} = $params{'dump_header'};
     $self->{'dump_cb'} = $params{'dump_cb'};
     $self->{'size'} = 0;
     $self->{'duration'} = 0.0;
@@ -461,14 +459,48 @@ sub start_xfer {
     $self->{'device_errors'} = [];
     $self->{'input_errors'} = [];
 
-    $xfer->start(sub { $self->_xfer_callback(@_); });
+    my $finish_starting_xfer = make_cb(finish_starting_xfer => sub  {
+	my $xdt = $self->{'xdt'} = Amanda::Xfer::Dest::Taper::Splitter->new(
+            $self->{'device'}, $params{'max_memory'}, $part_size,
+	    $use_mem_cache, $disk_cache_dirname);
 
+	my $xfer_elements = $params{'xfer_elements'};
+	my $xfer = $self->{'xfer'} = Amanda::Xfer->new([ @$xfer_elements, $xdt ]);
 
-    $self->_start_part();
+	# get the header ready for writing (totalparts was set by the caller)
+	$self->{'dump_header'}->{'partnum'} = 1;
+
+	$xfer->start(sub { $self->_xfer_callback(@_); });
+
+	$self->_start_part();
+    });
+
+    # invoke the devhandling object if we need a device; otherwise just
+    # finish the xfer now; note that getting a device may fail, and we may
+    # never start this xfer..
+    if (!$self->{'device'}) {
+	$self->dbg("need device for first part");
+	return $self->_get_new_volume($finish_starting_xfer);
+    } else {
+	$finish_starting_xfer->();
+    }
+}
+
+sub get_bytes_written {
+    my ($self) = @_;
+
+    if (defined $self->{'xdt'}) {
+	return $self->{'size'} + $self->{'xdt'}->get_part_bytes_written();
+    } else {
+	return $self->{'size'};
+    }
 }
 
 sub _start_part {
     my $self = shift;
+
+    die "device should be set already.." unless $self->{'device'};
+    $self->dbg("trying to start part");
 
     # if the dump wasn't successful, and we're not splitting, then bail out.  It's
     # up to higher-level components to re-try this dump on a new volume, if desired.
@@ -479,18 +511,9 @@ sub _start_part {
 	return;
     }
 
-    # invoke the devhandling object if we need a device
-    if (!$self->{'device'}) {
-	return $self->_get_new_volume();
-    }
-
-    # fix the header type to indicate whether this is the first part or subsequent
-    $self->{'dump_header'}->{'type'} =
-	    (defined $self->{'dump_header'}->{'partnum'} == 1)?
-		$Amanda::Header::F_DUMPFILE : $Amanda::Header::F_SPLIT_DUMPFILE;
-
     # and start writing this part
     $self->{'started_writing'} = 1;
+    $self->dbg("resuming transfer");
     $self->{'xdt'}->start_part(!$self->{'last_part_successful'},
 			       $self->{'device'},
 			       $self->{'dump_header'});
@@ -500,6 +523,7 @@ sub _xfer_callback {
     my $self = shift;
     my ($src, $msg, $xfer) = @_;
 
+    $self->dbg("got msg from xfer: $msg");
     if ($msg->{'type'} == $XMSG_PART_DONE) {
 	$self->_xmsg_part_done($src, $msg, $xfer);
     } elsif ($msg->{'type'} == $XMSG_INFO) {
@@ -539,13 +563,9 @@ sub _xmsg_part_done {
 	if ($msg->{'successful'}) {
 	    # update the header for the next dumpfile
 	    $self->{'dump_header'}->{'partnum'}++;
+	}
 
-	    # change the header so that the next part has the right type
-	    $self->{'dump_header'}->{'type'} = $Amanda::Header::F_SPLIT_DUMPFILE;
-
-	    # and go on to the next part
-	    $self->_start_part();
-	} else {
+	if ($msg->{'eom'}) {
 	    # if there's an error finishing the device, it's probably just carryover
 	    # from the error the Xfer::Dest::Taper encountered while writing to the
 	    # device, so we ignore it.
@@ -555,9 +575,30 @@ sub _xmsg_part_done {
 		debug("ignoring error while finishing device '$devname': $errmsg");
 	    }
 
-	    # if we're not splitting, then this dump is done and has failed
-	    if ($self->{'split_method'} eq 'none') {
-		my $msg = "No space left on device";
+	    # if the part failed..
+	    if (!$msg->{'successful'}) {
+		# if no caching was going on, then the dump has failed
+		if ($self->{'split_method'} eq 'none') {
+		    my $msg = "No space left on device";
+		    if ($self->{'device'}->status() != $DEVICE_STATUS_SUCCESS) {
+			$msg = $self->{'device'}->error_or_status();
+		    }
+		    $self->_dump_failed($msg);
+		    return;
+		}
+
+		# log a message for amreport
+		$self->{'feedback'}->notif_log_info(
+		    message => "Will request retry of failed split part.");
+	    }
+
+	    # get a new volume, then go on to the next part
+	    $self->_get_new_volume(sub { $self->_start_part(); });
+	} else {
+	    # if the part was unsuccessful, but the xfer dest has reason to believe
+	    # this is not due to EOT, then the dump is done
+	    if (!$msg->{'successful'}) {
+		my $msg = "unknown error while dumping";
 		if ($self->{'device'}->status() != $DEVICE_STATUS_SUCCESS) {
 		    $msg = $self->{'device'}->error_or_status();
 		}
@@ -565,12 +606,8 @@ sub _xmsg_part_done {
 		return;
 	    }
 
-	    # log a message for amreport
-	    $self->{'feedback'}->notif_log_info(
-		message => "Will request retry of failed split part.");
-
-	    # get a new volume, then go on to the next part
-	    $self->_get_new_volume();
+	    # no EOT -- go on to the next part
+	    $self->_start_part();
 	}
     }
 }
@@ -592,36 +629,44 @@ sub _xmsg_done {
     my ($src, $msg, $xfer) = @_;
 
     if ($xfer->get_status() == $Amanda::Xfer::XFER_DONE) {
-	# determine the correct final status - DONE if we're done, PARTIAL
-	# if we've started writing to the volume, otherwise FAILED
-	my $result;
-	if (@{$self->{'device_errors'}} or @{$self->{'input_errors'}}) {
-	    $result = $self->{'started_writing'}? 'PARTIAL' : 'FAILED';
-	} else {
-	    $result = 'DONE';
-	}
-
-	my $dump_cb = $self->{'dump_cb'};
-	my %dump_cb_args = (
-	    result => $result,
-	    input_errors => $self->{'input_errors'},
-	    device_errors => $self->{'device_errors'},
-	    size => $self->{'size'},
-	    duration => $self->{'duration'});
-
-	# reset everything and let the original caller know we're done
-	$self->{'xfer'} = undef;
-	$self->{'xdt'} = undef;
-	$self->{'dump_header'} = undef;
-	$self->{'dump_cb'} = undef;
-	$self->{'size'} = 0;
-	$self->{'duration'} = 0.0;
-	$self->{'device_errors'} = [];
-	$self->{'input_errors'} = [];
-
-	# and call the callback
-	$dump_cb->(%dump_cb_args);
+	$self->dbg("transfer is complete");
+	$self->_dump_done();
     }
+}
+
+sub _dump_done {
+    my $self = shift;
+
+    my $result;
+
+    # determine the correct final status - DONE if we're done, PARTIAL
+    # if we've started writing to the volume, otherwise FAILED
+    if (@{$self->{'device_errors'}} or @{$self->{'input_errors'}}) {
+	$result = $self->{'started_writing'}? 'PARTIAL' : 'FAILED';
+    } else {
+	$result = 'DONE';
+    }
+
+    my $dump_cb = $self->{'dump_cb'};
+    my %dump_cb_args = (
+	result => $result,
+	input_errors => $self->{'input_errors'},
+	device_errors => $self->{'device_errors'},
+	size => $self->{'size'},
+	duration => $self->{'duration'});
+
+    # reset everything and let the original caller know we're done
+    $self->{'xfer'} = undef;
+    $self->{'xdt'} = undef;
+    $self->{'dump_header'} = undef;
+    $self->{'dump_cb'} = undef;
+    $self->{'size'} = 0;
+    $self->{'duration'} = 0.0;
+    $self->{'device_errors'} = [];
+    $self->{'input_errors'} = [];
+
+    # and call the callback
+    $dump_cb->(%dump_cb_args);
 }
 
 sub _dump_failed {
@@ -630,9 +675,16 @@ sub _dump_failed {
 
     push @{$self->{'device_errors'}}, $error;
 
+    $self->dbg("cancelling the transfer: $error");
+
     # cancelling the xdt will eventually cause an XMSG_DONE, which will notice
-    # the error and set the result correctly
-    $self->{'xfer'}->cancel();
+    # the error and set the result correctly; but if there's no xfer, then we
+    # can just call _dump_done directly.
+    if (defined $self->{'xfer'}) {
+	$self->{'xfer'}->cancel();
+    } else {
+	$self->_dump_done();
+    }
 }
 
 sub _log_volume_done {
@@ -650,8 +702,14 @@ sub _log_volume_done {
     }
 }
 
+# invoke the devhandling to get a new device, with all of the requisite
+# notifications and checks and whatnot.  On *success*, call $gnv_cb; on
+# failure, call other appropriate methods.
 sub _get_new_volume {
     my $self = shift;
+    my ($gnv_cb) = @_;
+
+    die "no gnv_cb" unless defined($gnv_cb);
 
     $self->_log_volume_done();
     $self->{'device'} = undef;
@@ -669,19 +727,19 @@ sub _get_new_volume {
 	    if ($error) {
 		$self->_dump_failed($error);
 	    } else {
-		$self->_get_new_volume();
+		$self->_get_new_volume($gnv_cb);
 	    }
 	});
 
 	return;
     }
 
-    $self->{'devhandling'}->get_volume(volume_cb => sub { $self->_volume_cb(@_); });
+    $self->{'devhandling'}->get_volume(volume_cb => sub { $self->_volume_cb($gnv_cb, @_); });
 }
 
 sub _volume_cb  {
     my $self = shift;
-    my ($scan_error, $request_denied_reason, $reservation,
+    my ($gnv_cb, $scan_error, $request_denied_reason, $reservation,
 	$new_label, $access_mode, $is_new) = @_;
 
     # note that we prefer the request_denied_reason over the scan error.  If
@@ -704,6 +762,8 @@ sub _volume_cb  {
 	return;
     }
 
+    $self->dbg("got new volume; writing new label");
+
     # from here on, if an error occurs, we must send notif_new_tape, and look
     # for a new volume
     $self->{'reservation'} = $reservation;
@@ -721,7 +781,7 @@ sub _volume_cb  {
 		error => "while reading label on new volume: " . $device->error_or_status(),
 		volume_label => undef);
 
-	    return $self->_get_new_volume();
+	    return $self->_get_new_volume($gnv_cb);
 	}
 	$old_label = $device->volume_label;
 	$old_timestamp = $device->volume_time;
@@ -768,7 +828,7 @@ sub _volume_cb  {
 	    error => "while labeling new volume: " . $device->error_or_status(),
 	    volume_label => $erased? $new_label : undef);
 
-	return $self->_get_new_volume();
+	return $self->_get_new_volume($gnv_cb);
     }
 
     # success!
@@ -782,13 +842,19 @@ sub _volume_cb  {
 	if ($err) {
 	    $self->{'feedback'}->notif_log_info(
 		message => "Error from set_label: $err");
-	    # fall through to start the part anyway..
+	    # fall through to the gnv_cb anyway...
 	}
-	$self->_start_part();
+	$gnv_cb->();
     });
-
     $self->{'reservation'}->set_label(label => $new_label,
 	finished_cb => $label_set_cb);
+}
+
+sub dbg {
+    my ($self, $msg) = @_;
+    if ($self->{'debug'}) {
+	debug("Amanda::Taper::Scribe: $msg");
+    }
 }
 
 ##

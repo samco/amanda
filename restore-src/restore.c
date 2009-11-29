@@ -39,11 +39,12 @@
 #include "arglist.h"
 #include "cmdline.h"
 #include "server_util.h"
+#include "stream.h"
 #include <signal.h>
 #include <timestamp.h>
 
-#include <device.h>
-#include <queueing.h>
+#include "device.h"
+#include "queueing.h"
 #include <glib.h>
 
 typedef enum {
@@ -74,6 +75,8 @@ typedef struct open_output_s {
     int lastpartnum;
     pid_t comp_enc_pid;
     int outfd;
+    e_restore_mode   restore_mode;
+    DirectTCPrestore directtcp;
 } open_output_t;
 
 typedef struct dumplist_s {
@@ -438,6 +441,11 @@ flush_open_outputs(
 	    if(only_file && !headers_equal(cur_file, only_file, 1)){
 		continue;
 	    }
+
+	    /* directtcp can't be reassembled */
+	    if (cur_out->directtcp.conn) {
+		continue;
+	    }
 	    cur_find_res = alloc(SIZEOF(find_result_t));
 	    memset(cur_find_res, '\0', SIZEOF(find_result_t));
 	    cur_find_res->timestamp = stralloc(cur_file->datestamp);
@@ -503,7 +511,7 @@ flush_open_outputs(
 		    outfd = cur_out->outfd;
 		    if(outfd < 0) {
 			char *cur_filename = make_filename(cur_file);
-			open(cur_filename, O_RDWR|O_APPEND);
+			outfd = open(cur_filename, O_RDWR|O_APPEND);
 			if (outfd < 0) {
 			  error(_("Couldn't open %s for appending: %s"),
 			        cur_filename, strerror(errno));
@@ -542,8 +550,16 @@ flush_open_outputs(
 	    aclose(cur_out->outfd);
 	}
 
+	if (cur_out->directtcp.conn) {
+	    directtcp_connection_close(cur_out->directtcp.conn);
+	    g_object_unref(cur_out->directtcp.conn);
+	}
+
 	if(cur_out->comp_enc_pid > 0){
 	    waitpid(cur_out->comp_enc_pid, &compress_status, 0);
+	}
+	if (cur_out->directtcp.pid > 0) {
+	    waitpid(cur_out->directtcp.pid, &compress_status, 0);
 	}
 	amfree(cur_out->file);
 	prev = cur_out;
@@ -693,8 +709,11 @@ read_holding_disk_header(
 
 
 /* FIXME: Mondo function that needs refactoring. */
-void restore(RestoreSource * source,
-             rst_flags_t *	flags)
+void restore(RestoreSource  *source,
+	     rst_flags_t    *flags,
+	     FILE           *prompt_out,
+	     FILE           *prompt_in,
+	     am_feature_t   *their_features)
 {
     int dest = -1, out;
     int file_is_compressed;
@@ -702,7 +721,7 @@ void restore(RestoreSource * source,
     int check_for_aborted = 0;
     char *tmp_filename = NULL, *final_filename = NULL;
     struct stat statinfo;
-    open_output_t *free_myout = NULL, *myout = NULL, *oldout = NULL;
+    open_output_t *free_myout = NULL, *myout = NULL;
     dumplist_t *tempdump = NULL, *fileentry = NULL;
     char *buffer;
     int need_compress=0, need_uncompress=0, need_decrypt=0;
@@ -711,13 +730,16 @@ void restore(RestoreSource * source,
         int	pipe[2];
     } pipes[3];
     char * filename;
+    DirectTCPAddr *addrs;
 
     filename = make_filename(source->header);
 
     memset(pipes, -1, SIZEOF(pipes));
 
     if(already_have_dump(source->header)){
-	g_fprintf(stderr, _(" *** Duplicate file %s, one is probably an aborted write\n"), filename);
+	g_fprintf(stderr,
+	       _(" *** Duplicate file %s, one is probably an aborted write\n"),
+	       filename);
 	check_for_aborted = 1;
     }
 
@@ -732,9 +754,9 @@ void restore(RestoreSource * source,
      * continuation of a file we just restored, and we've still got the
      * output handle from that previous restore, we're golden.  Phew.
      */
-    if(flags->inline_assemble && source->header->type == F_SPLIT_DUMPFILE){
+    if (flags->inline_assemble && source->header->type == F_SPLIT_DUMPFILE) {
 	myout = open_outputs;
-	while(myout != NULL){
+	while (myout != NULL) {
 	    if(myout->file->type == F_SPLIT_DUMPFILE &&
                headers_equal(source->header, myout->file, 1)){
 		if(source->header->partnum == myout->lastpartnum + 1){
@@ -744,25 +766,24 @@ void restore(RestoreSource * source,
 	    }
 	    myout = myout->next;
 	}
-	if(myout != NULL) myout->lastpartnum = source->header->partnum;
-	else if(source->header->partnum != 1){
+	if (myout != NULL) {
+	    myout->lastpartnum = source->header->partnum;
+	} else if (source->header->partnum != 1) {
 	    g_fprintf(stderr, _("%s:      Chunk out of order, will save to disk and append to output.\n"), get_pname());
 	    flags->pipe_to_fd = -1;
 	    flags->compress = 0;
 	    flags->leave_comp = 1;
 	}
-	if(myout == NULL){
-	    free_myout = myout = alloc(SIZEOF(open_output_t));
-	    memset(myout, 0, SIZEOF(open_output_t));
-	}
-    }
-    else{
-      free_myout = myout = alloc(SIZEOF(open_output_t));
-      memset(myout, 0, SIZEOF(open_output_t));
     }
 
+    if (myout == NULL) {
+	free_myout = myout = alloc(SIZEOF(open_output_t));
+	memset(myout, 0, SIZEOF(open_output_t));
+	myout->restore_mode = source->restore_mode;
+	myout->directtcp.conn = NULL;
+    }
 
-    if(is_continuation && flags->pipe_to_fd == -1){
+    if (is_continuation && flags->pipe_to_fd == -1) {
 	char *filename;
 	filename = make_filename(myout->file);
 	g_fprintf(stderr, _("%s:      appending to %s\n"), get_pname(),
@@ -772,8 +793,8 @@ void restore(RestoreSource * source,
 
     /* adjust compression flag */
     file_is_compressed = source->header->compressed;
-    if(!flags->compress && file_is_compressed &&
-       !known_compress_type(source->header)) {
+    if (!flags->compress && file_is_compressed &&
+        !known_compress_type(source->header)) {
 	g_fprintf(stderr, 
 		_("%s: unknown compression suffix %s, can't uncompress\n"),
 		get_pname(), source->header->comp_suffix);
@@ -781,43 +802,42 @@ void restore(RestoreSource * source,
     }
 
     /* set up final destination file */
-
-    if(is_continuation && myout != NULL) {
-      out = myout->outfd;
+    if (is_continuation) {
+	out = myout->outfd;
     } else {
-      if(flags->pipe_to_fd != -1) {
-  	  dest = flags->pipe_to_fd;
-      } else {
-  	  char *filename_ext = NULL;
+	if (flags->pipe_to_fd != -1) {
+	    dest = flags->pipe_to_fd;
+	} else {
+  	    char *filename_ext = NULL;
   
-  	  if(flags->compress) {
-  	      filename_ext = file_is_compressed ? source->header->comp_suffix
-  	  				      : COMPRESS_SUFFIX;
-  	  } else if(flags->raw) {
-  	      filename_ext = ".RAW";
-  	  } else {
-  	      filename_ext = "";
-  	  }
-  	  filename_ext = stralloc2(filename, filename_ext);
-	  tmp_filename = stralloc(filename_ext); 
-	  if(flags->restore_dir != NULL) {
-	      char *tmpstr = vstralloc(flags->restore_dir, "/",
-	                               tmp_filename, NULL);
-	      amfree(tmp_filename);
-	      tmp_filename = tmpstr;
-	  } 
-	  final_filename = tmp_filename; 
-	  tmp_filename = vstralloc(final_filename, ".tmp", NULL);
-  	  if((dest = open(tmp_filename, (O_CREAT | O_RDWR | O_TRUNC),
-			  CREAT_MODE)) < 0) {
-  	      error(_("could not create output file %s: %s"),
-	      	    tmp_filename, strerror(errno));
-              /*NOTREACHED*/
-	  }
-  	  amfree(filename_ext);
-      }
-  
-      out = dest;
+  	    if (flags->compress) {
+		filename_ext = file_is_compressed ? source->header->comp_suffix
+						  : COMPRESS_SUFFIX;
+  	    } else if (flags->raw) {
+		filename_ext = ".RAW";
+  	    } else {
+		filename_ext = "";
+  	    }
+  	    filename_ext = stralloc2(filename, filename_ext);
+	    tmp_filename = stralloc(filename_ext); 
+	    if (flags->restore_dir != NULL) {
+		char *tmpstr = vstralloc(flags->restore_dir, "/",
+					 tmp_filename, NULL);
+		amfree(tmp_filename);
+		tmp_filename = tmpstr;
+	    } 
+	    final_filename = tmp_filename; 
+	    tmp_filename = vstralloc(final_filename, ".tmp", NULL);
+  	    if ((dest = open(tmp_filename, (O_CREAT | O_RDWR | O_TRUNC),
+			     CREAT_MODE)) < 0) {
+		error(_("could not create output file %s: %s"),
+	      	      tmp_filename, strerror(errno));
+		/*NOTREACHED*/
+	    }
+  	    amfree(filename_ext);
+	}
+
+        out = dest;
     }
 
     /*
@@ -827,12 +847,11 @@ void restore(RestoreSource * source,
      * makes it easier to remove the header (e.g. in amrecover) since
      * it has a fixed size.
      */
-    if(flags->raw || (flags->headers && !is_continuation)) {
+    if (flags->raw || (flags->headers && !is_continuation)) {
 	ssize_t     w;
 	dumpfile_t  tmp_hdr;
-	char       *dle_str;
 
-	if(flags->compress && !file_is_compressed) {
+	if (flags->compress && !file_is_compressed) {
 	    source->header->compressed = 1;
 	    g_snprintf(source->header->uncompress_cmd,
                      SIZEOF(source->header->uncompress_cmd),
@@ -852,22 +871,21 @@ void restore(RestoreSource * source,
 
 	memcpy(&tmp_hdr, source->header, SIZEOF(dumpfile_t));
 
-	/* remove CONT_FILENAME from header */
-	memset(source->header->cont_filename, '\0',
-               SIZEOF(source->header->cont_filename));
-	dle_str = clean_dle_str_for_client(source->header->dle_str);
-	source->header->dle_str = dle_str;
-	source->header->blocksize = DISK_BLOCK_BYTES;
+	/* create a clean copy of the header */
+	memset(tmp_hdr.cont_filename, '\0',
+	       SIZEOF(source->header->cont_filename));
+	tmp_hdr.dle_str = clean_dle_str_for_client(source->header->dle_str);
+	tmp_hdr.blocksize = DISK_BLOCK_BYTES;
 
 	/*
 	 * Dumb down split file headers as well, so that older versions of
 	 * things like amrecover won't gag on them.
 	 */
-	if(source->header->type == F_SPLIT_DUMPFILE && flags->mask_splits){
-	    source->header->type = F_DUMPFILE;
+	if (source->header->type == F_SPLIT_DUMPFILE && flags->mask_splits) {
+	    tmp_hdr.type = F_DUMPFILE;
 	}
 
-	buffer = build_header(source->header, NULL, DISK_BLOCK_BYTES);
+	buffer = build_header(&tmp_hdr, NULL, DISK_BLOCK_BYTES);
 	if (!buffer) /* this shouldn't happen */
 	    error(_("header does not fit in %zd bytes"), (size_t)DISK_BLOCK_BYTES);
 
@@ -892,7 +910,91 @@ void restore(RestoreSource * source,
 	    flags->header_to_fd = -1;
 	}
 	amfree(buffer);
-	memcpy(source->header, &tmp_hdr, SIZEOF(dumpfile_t));
+        dumpfile_free_data(&tmp_hdr);
+    }
+
+    if (!is_continuation) {
+	/* first part of a dump */
+	if (myout->restore_mode == DEVICE_MODE) {
+	    data_path_t    data_path = DATA_PATH_AMANDA;
+            char          *input, *s;
+
+	    /* Wait for amrecover DATA-PATH */
+	    if (flags->amidxtaped &&
+		am_has_feature(their_features, fe_amidxtaped_datapath)) {
+		data_path = 0;
+		input = agets(prompt_in);/* Strips \n but not \r */
+		if (!input) {
+		    error(_("Connection lost with amrecover"));
+		    /*NOTREACHED*/
+		} else if (strncmp_const(input, "DATA-PATH ") != 0) {
+		    error(_("Did not get DATA-PATH from amrecover"));
+		    /*NOTREACHED*/
+		}
+		s = input;
+		while ((s = strchr(s, ' '))) {
+		    s++;
+		    if (strncmp_const(s, "AMANDA") == 0) {
+			data_path |= DATA_PATH_AMANDA;
+			g_debug("DATA_PATH_AMANDA");
+		    }
+		    if (strncmp_const(s, "DIRECT-TCP") == 0) {
+			data_path |= DATA_PATH_DIRECTTCP;
+			g_debug("DATA_PATH_DIRECTTCP");
+		    }
+		}
+		amfree(input);
+	    }
+
+	    if (file_is_compressed || source->header->encrypted)
+		data_path = DATA_PATH_AMANDA;
+
+	    if (data_path & DATA_PATH_DIRECTTCP &&
+		device_directtcp_supported(source->u.device)) {
+		myout->restore_mode = DIRECTTCP_MODE;
+	    } else if (data_path & DATA_PATH_AMANDA &&
+		       device_directtcp_supported(source->u.device)) {
+		myout->restore_mode = LOCAL_DIRECTTCP_MODE;
+	    } else {
+		myout->restore_mode = DEVICE_MODE;
+	    }
+
+	    source->restore_mode = myout->restore_mode;
+
+	    if (myout->restore_mode == LOCAL_DIRECTTCP_MODE ||
+		myout->restore_mode == DIRECTTCP_MODE) {
+		device_listen(source->u.device, &addrs);
+	    }
+
+	    /* send DATA-PATH reply */
+	    if (flags->amidxtaped &&
+		am_has_feature(their_features, fe_amidxtaped_datapath)) {
+		if (myout->restore_mode == DEVICE_MODE) {
+	            g_fprintf(prompt_out, "DATA-PATH AMANDA\r\n");
+		} else if (myout->restore_mode == LOCAL_DIRECTTCP_MODE) {
+	            g_fprintf(prompt_out, "DATA-PATH AMANDA\r\n");
+		    g_debug("DATA-PATH AMANDA");
+		} else if (myout->restore_mode == DIRECTTCP_MODE) {
+		    char *addr_list = stralloc("");
+		    DirectTCPAddr *addr;
+
+		    for (addr=addrs; addr->ipv4 != 0; addr++) {
+			struct in_addr in;
+			char *an_addr;
+			in.s_addr = addr->ipv4;
+			an_addr = g_strdup_printf(" %s:%d", inet_ntoa(in),
+					     addr->port);
+			vstrextend(&addr_list, an_addr, NULL);
+			amfree(an_addr);
+		    }
+		    g_fprintf(prompt_out, "DATA-PATH DIRECT-TCP%s\r\n",
+			      addr_list);
+		    g_debug("DATA-PATH DIRECT-TCP%s", addr_list);
+		    amfree(addr_list);
+		}
+	    }
+	    fflush(prompt_out);
+	}
     }
 
     /* find out if compression or uncompression is needed here */
@@ -1078,7 +1180,7 @@ void restore(RestoreSource * source,
     }
 
     /* copy the rest of the file from tape to the output */
-    if (source->restore_mode == HOLDING_MODE) {
+    if (myout->restore_mode == HOLDING_MODE) {
         dumpfile_t file;
 	queue_fd_t queue_read = {source->u.holding_fd, NULL};
 	queue_fd_t queue_write = {pipes[0].pipe[1], NULL};
@@ -1142,7 +1244,7 @@ void restore(RestoreSource * source,
 		exit(2);
 	    }
 	}            
-    } else {
+    } else if (myout->restore_mode == DEVICE_MODE) {
 	queue_fd_t queue_fd = {pipes[0].pipe[1], NULL};
         gboolean result = device_read_to_fd(source->u.device, &queue_fd);
 	if (source->u.device->status != DEVICE_STATUS_SUCCESS) {
@@ -1159,9 +1261,63 @@ void restore(RestoreSource * source,
 	    dbclose();
 	    exit(2);
 	}
+    } else if (myout->restore_mode == LOCAL_DIRECTTCP_MODE) {
+	if (!is_continuation) {
+	    /* start a process to read from addr and write to dest */
+	    switch(myout->directtcp.pid = fork()) {
+	    case -1:
+		error(_("could not fork directtcp: %s"), strerror(errno));
+		/*NOTREACHED*/
+	    case 0:
+            {   char buffer[DISK_BLOCK_BYTES];
+		gsize size, wsize;
+		int fd;
+		in_port_t port = addrs->port;
+		in_port_t localport;
+		struct in_addr in;
+		char *ipname;
+
+		in.s_addr = addrs->ipv4;
+		ipname = stralloc(inet_ntoa(in));
+		g_debug(_("openning connection from host (%s) port (%d)"),
+			ipname, port);
+		fd = stream_client(ipname, port, STREAM_BUFSIZE,
+				   STREAM_BUFSIZE, &localport, 0);
+		amfree(ipname);
+		while ((size = full_read(fd, buffer, sizeof(buffer))) > 0){
+		    if ((wsize = full_write(pipes[0].pipe[1], buffer, size)) != size) {
+			error(_("write error: %s"), strerror(errno));
+	    	    }
+		}
+		close(fd);
+		close(pipes[0].pipe[1]);
+		exit(0);
+	    }
+	    default:
+		break;
+	    }
+	    aclose(pipes[0].pipe[1]);
+	}
     }
 
-    amfree(free_myout);
+    if (myout->restore_mode == LOCAL_DIRECTTCP_MODE ||
+	myout->restore_mode == DIRECTTCP_MODE) {
+	gsize size = 0;
+
+	if (!is_continuation) {
+	    device_accept(source->u.device,
+			            &myout->directtcp.conn, NULL, NULL);
+	}
+	if (!device_read_to_connection(source->u.device,
+						 myout->directtcp.conn,
+						 size, &size)) {
+	    g_fprintf(stderr, _("Problem transfering data: %s\n"),
+		      device_error_or_status(source->u.device));
+	    dbclose();
+	    exit(2);
+	}
+    }
+
     if(!flags->inline_assemble) {
         if(out != dest)
 	    aclose(out);
@@ -1234,6 +1390,7 @@ void restore(RestoreSource * source,
 	    /*NOTREACHED*/
 	}
     }
+    amfree(filename);
     amfree(tmp_filename);
     amfree(final_filename);
 
@@ -1243,15 +1400,18 @@ void restore(RestoreSource * source,
      * structures (we waited in case we needed to give up)
      */
     if(!is_continuation){
-        oldout = alloc(SIZEOF(open_output_t));
-        oldout->file = alloc(SIZEOF(dumpfile_t));
-        memcpy(oldout->file, source->header, SIZEOF(dumpfile_t));
-        if(flags->inline_assemble) oldout->outfd = pipes[0].pipe[1];
-	else oldout->outfd = -1;
-        oldout->comp_enc_pid = -1;
-        oldout->lastpartnum = source->header->partnum;
-        oldout->next = open_outputs;
-        open_outputs = oldout;
+        myout->file = alloc(SIZEOF(dumpfile_t));
+        memcpy(myout->file, source->header, SIZEOF(dumpfile_t));
+        if (flags->inline_assemble)
+	    myout->outfd = pipes[0].pipe[1];
+	else
+	    myout->outfd = -1;
+        myout->comp_enc_pid = -1;
+        myout->lastpartnum = source->header->partnum;
+        myout->next = open_outputs;
+        open_outputs = myout;
+    } else {
+	amfree(free_myout);
     }
     if(alldumps_list){
 	fileentry = alldumps_list;
@@ -1599,8 +1759,10 @@ static gboolean run_dumpspecs(GSList * dumpspecs,
    be attempted. *next_file will be filled in with the number of the
    file following the one that was attempted. */
 static RestoreFileStatus
-try_restore_single_file(Device * device, int file_num, int* next_file,
+try_restore_single_file(Device * device,
+                        int file_num, int* next_file,
                         FILE * prompt_out,
+                        FILE * prompt_in,
                         rst_flags_t * flags,
                         am_feature_t * their_features,
                         dumpfile_t * first_restored_file,
@@ -1610,7 +1772,6 @@ try_restore_single_file(Device * device, int file_num, int* next_file,
     RestoreSource source;
     source.u.device = device;
     source.restore_mode = DEVICE_MODE;
-
     source.header = device_seek_file(device, file_num);
 
     if (source.header == NULL) {
@@ -1621,7 +1782,8 @@ try_restore_single_file(Device * device, int file_num, int* next_file,
 		     device_error(device));
         return RESTORE_STATUS_NEXT_TAPE;
     } else if (source.header->type == F_TAPEEND) {
-        amfree(source.header);
+        dumpfile_free_data(source.header);
+	amfree(source.header);
         return RESTORE_STATUS_NEXT_TAPE;
     } else if (device->file != file_num) {
         if (next_file == NULL) {
@@ -1637,7 +1799,7 @@ try_restore_single_file(Device * device, int file_num, int* next_file,
         }
     }
     if (!am_has_feature(their_features, fe_amrecover_dle_in_header)) {
-	source.header->dle_str = NULL;
+	amfree(source.header->dle_str);
     }
 
     if (next_file != NULL) {
@@ -1662,6 +1824,8 @@ try_restore_single_file(Device * device, int file_num, int* next_file,
 		 qdisk, source.header->dumplevel, source.header->partnum,
 		 source.header->totalparts);
 	amfree(qdisk);
+        dumpfile_free_data(source.header);
+	amfree(source.header);
         return RESTORE_STATUS_NEXT_FILE;
     }
 
@@ -1670,6 +1834,8 @@ try_restore_single_file(Device * device, int file_num, int* next_file,
 	first_restored_file->type != F_EMPTY &&
         !headers_equal(first_restored_file, source.header, 1) &&
         (flags->pipe_to_fd != -1)) {
+        dumpfile_free_data(source.header);
+	amfree(source.header);
         return RESTORE_STATUS_STOP;
     }
 
@@ -1686,10 +1852,22 @@ try_restore_single_file(Device * device, int file_num, int* next_file,
     amfree(qdisk);
 
     record_seen_dump(tape_seen, source.header);
-    restore(&source, flags);
+    restore(&source, flags, prompt_out, prompt_in, their_features);
     if (first_restored_file) {
 	memcpy(first_restored_file, source.header, sizeof(dumpfile_t));
     }
+
+    if (source.header->totalparts > 0 &&
+	have_all_parts(source.header, source.header->totalparts)) {
+	if (flags->delay_assemble || flags->inline_assemble) {
+	    flush_open_outputs(1, source.header);
+	} else {
+	    flush_open_outputs(0, source.header);
+	}
+    }
+
+    dumpfile_free_data(source.header);
+    amfree(source.header);
     return RESTORE_STATUS_NEXT_FILE;
 }
 
@@ -1699,6 +1877,7 @@ try_restore_single_file(Device * device, int file_num, int* next_file,
 gboolean
 search_a_tape(Device      * device,
               FILE         *prompt_out, /* Where to send any prompts */
+	      FILE         *prompt_in,
               rst_flags_t  *flags,      /* Restore options. */
               am_feature_t *their_features, 
               tapelist_t   *desired_tape, /* A list of desired tape files */
@@ -1712,7 +1891,6 @@ search_a_tape(Device      * device,
               int           tape_count,
               FILE * logstream) {
     seentapes_t * tape_seen_head = NULL;
-    RestoreSource source;
     off_t       filenum;
 
     int         tapefile_idx = -1;
@@ -1722,9 +1900,6 @@ search_a_tape(Device      * device,
     /* if we're doing an inventory (logstream != NULL), then we need
      * somewhere to keep track of our seen tapes */
     g_assert(tape_seen != NULL || logstream == NULL);
-
-    source.restore_mode = DEVICE_MODE;
-    source.u.device = device;
 
     filenum = (off_t)0;
     if(desired_tape && desired_tape->numfiles > 0)
@@ -1760,8 +1935,10 @@ search_a_tape(Device      * device,
         for (file_index = 0; file_index < desired_tape->numfiles;
              file_index ++) {
             int file_num = desired_tape->files[file_index];
-            restore_status = try_restore_single_file(device, file_num, NULL,
-                                                     prompt_out, flags,
+            restore_status = try_restore_single_file(device,
+						     file_num, NULL,
+                                                     prompt_out, prompt_in,
+						     flags,
                                                      their_features,
                                                      first_restored_file,
                                                      NULL, tape_seen_head);
@@ -1771,7 +1948,9 @@ search_a_tape(Device      * device,
     } else if(flags->fsf && flags->amidxtaped) {
         /* Restore a single file, then quit. */
         restore_status =
-            try_restore_single_file(device, flags->fsf, NULL, prompt_out, flags,
+            try_restore_single_file(device,
+				    flags->fsf, NULL, prompt_out, prompt_in,
+				    flags,
                                     their_features, first_restored_file,
                                     dumpspecs, tape_seen_head);
     } else {
@@ -1793,7 +1972,7 @@ search_a_tape(Device      * device,
         for (;;) {
             restore_status =
                 try_restore_single_file(device, file_num, &file_num,
-                                        prompt_out, flags,
+                                        prompt_out, prompt_in, flags,
                                         their_features, first_restored_file,
                                         dumpspecs, tape_seen_head);
             if (restore_status != RESTORE_STATUS_NEXT_FILE)
@@ -1856,6 +2035,7 @@ static void print_expected_tape_list(FILE* prompt_out, FILE* prompt_in,
    stdout-pipe case, we abort according to last_header. Returns TRUE
    if the restore should continue, FALSE if we are done. */
 gboolean restore_holding_disk(FILE * prompt_out,
+			      FILE * prompt_in,
                               rst_flags_t * flags,
                               am_feature_t * features,
                               tapelist_t * file,
@@ -1918,7 +2098,15 @@ gboolean restore_holding_disk(FILE * prompt_out,
 	     qdisk, source.header->dumplevel, source.header->partnum,
 	     source.header->totalparts);
     amfree(qdisk);
-    restore(&source, flags);
+    restore(&source, flags, prompt_out, prompt_in, features);
+
+    if (flags->delay_assemble || flags->inline_assemble) {
+	flush_open_outputs(1, source.header);
+    } else {
+	flush_open_outputs(0, source.header);
+    }
+
+    dumpfile_free_data(source.header);
     aclose(source.u.holding_fd);
     return TRUE;
 }
@@ -1978,13 +2166,13 @@ restore_from_tapelist(FILE * prompt_out,
         if (cur_volume->isafile) {
             /* Restore from holding disk; just go. */
             if (first_restored_file.type == F_UNKNOWN) {
-                if (!restore_holding_disk(prompt_out, flags,
+                if (!restore_holding_disk(prompt_out, prompt_in, flags,
                                           features, cur_volume, &seentapes,
                                           NULL, NULL, &first_restored_file)) {
                     break;
                 }
             } else {
-                restore_holding_disk(prompt_out, flags, features,
+                restore_holding_disk(prompt_out, prompt_in, flags, features,
                                      cur_volume, &seentapes,
                                      NULL, &first_restored_file, NULL);
             }
@@ -2023,14 +2211,15 @@ restore_from_tapelist(FILE * prompt_out,
                           device->volume_label);
             }
 
-            if (!search_a_tape(device, prompt_out, flags, features,
+            if (!search_a_tape(device, prompt_out, prompt_in,
+			       flags, features,
                                cur_volume, dumpspecs, &seentapes,
                                &first_restored_file, 0, logstream)) {
                 g_object_unref(device);
                 break;
             }
             g_object_unref(device);
-        }            
+        }
     }
 
     free_seen_tapes(seentapes);
@@ -2085,7 +2274,8 @@ restore_without_tapelist(FILE * prompt_out,
 	g_fprintf(stderr, "Scanning %s (slot %s)\n", device->volume_label,
 		curslot);
         
-        if (!search_a_tape(device, prompt_out, flags, features,
+        if (!search_a_tape(device, prompt_out, prompt_in,
+			   flags, features,
                            NULL, dumpspecs, &seentapes, &first_restored_file,
                            tape_count, logstream)) {
             g_object_unref(device);
@@ -2205,10 +2395,12 @@ search_tapes(
                                  (use_changer ? slots : -1),
                                  logstream);
     }
+    amfree(cur_tapedev);
 
     if(logstream && logstream != stderr && logstream != stdout){
 	fclose(logstream);
     }
+
     if(flags->delay_assemble || flags->inline_assemble){
 	flush_open_outputs(1, NULL);
     }

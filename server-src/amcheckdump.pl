@@ -14,7 +14,7 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
 # 
-# Contact information: Zmanda Inc., 465 S Mathlida Ave, Suite 300
+# Contact information: Zmanda Inc., 465 S. Mathilda Ave., Suite 300
 # Sunnyvale, CA 94086, USA, or: http://www.zmanda.com
 
 use lib '@amperldir@';
@@ -31,6 +31,7 @@ use Amanda::Logfile;
 use Amanda::Util qw( :constants );
 use Amanda::Changer;
 use Amanda::Constants;
+use Amanda::MainLoop;
 
 # Have all images been verified successfully so far?
 my $all_success = 1;
@@ -79,7 +80,7 @@ sub find_next_device {
         <STDIN>;
     }
 
-    my $load_sub = sub {
+    my $load_sub = make_cb(load_sub => sub {
 	my ($err) = @_;
 	if ($err) {
 	    print STDERR $err, "\n";
@@ -97,16 +98,19 @@ sub find_next_device {
 		Amanda::MainLoop::quit();
 	    },
 	);
-    };
+    });
 
-    if (defined $reservation) {
-	$reservation->release(finished_cb => $load_sub);
-    } else {
-	$load_sub->(undef);
-    }
+    my $start = make_cb(start => sub {
+	if (defined $reservation) {
+	    $reservation->release(finished_cb => $load_sub);
+	} else {
+	    $load_sub->(undef);
+	}
+    });
 
     # let the mainloop run until the find is done.  This is a temporary
     # hack until all of amcheckdump is event-based.
+    Amanda::MainLoop::call_later($start);
     Amanda::MainLoop::run();
 
     return $reservation->{'device'};

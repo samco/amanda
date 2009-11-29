@@ -13,10 +13,10 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
 #
-# Contact information: Zmanda Inc, 465 S Mathlida Ave, Suite 300
+# Contact information: Zmanda Inc, 465 S. Mathilda Ave., Suite 300
 # Sunnyvale, CA 94086, USA, or: http://www.zmanda.com
 
-use Test::More tests => 20;
+use Test::More tests => 21;
 use strict;
 
 use lib "@amperldir@";
@@ -25,17 +25,13 @@ use Installcheck::Mock;
 use Installcheck::Config;
 use Amanda::Device qw( :constants );
 use Amanda::Config qw( :init );
-use Amanda::Util;
 
-Amanda::Util::set_pname("Amanda_Device_ndmp");
 Amanda::Debug::dbopen("installcheck");
 Installcheck::log_test_output();
 
 my $ndmp_port = Installcheck::get_unused_port();
-my $ndmp_proxy_port = Installcheck::get_unused_port();
 
 my $testconf = Installcheck::Config->new();
-$testconf->add_param("ndmp-proxy-port", $ndmp_proxy_port);
 $testconf->write();
 
 my $cfg_result = config_init($CONFIG_INIT_EXPLICIT_NAME, 'TESTCONF');
@@ -47,19 +43,19 @@ if ($cfg_result != $CFGERR_OK) {
 my $tapefile = Installcheck::Mock::run_ndmjob($ndmp_port);
 pass("started ndmjob in daemon mode");
 
-my $dev = Amanda::Device->new("ndmp:localhost:9i1\@foo");
+my $dev = Amanda::Device->new("ndmp:127.0.0.1:9i1\@foo");
 isnt($dev->status(), $DEVICE_STATUS_SUCCESS,
     "creation of an ndmp device fails with invalid port");
 
-$dev = Amanda::Device->new("ndmp:localhost:90000\@foo");
+$dev = Amanda::Device->new("ndmp:127.0.0.1:90000\@foo");
 isnt($dev->status(), $DEVICE_STATUS_SUCCESS,
     "creation of an ndmp device fails with too-large port");
 
-$dev = Amanda::Device->new("ndmp:localhost:$ndmp_port");
+$dev = Amanda::Device->new("ndmp:127.0.0.1:$ndmp_port");
 isnt($dev->status(), $DEVICE_STATUS_SUCCESS,
     "creation of an ndmp device fails without ..\@device_name");
 
-$dev = Amanda::Device->new("ndmp:localhost:$ndmp_port\@$tapefile");
+$dev = Amanda::Device->new("ndmp:127.0.0.1:$ndmp_port\@$tapefile");
 is($dev->status(), $DEVICE_STATUS_SUCCESS,
     "creation of an ndmp device succeeds with correct syntax");
 
@@ -71,6 +67,9 @@ ok($dev->property_set("ndmp_password", "bar"),
     "set ndmp_password property");
 is($dev->property_get("ndmp_password"), "bar",
     "..and get the value back");
+
+ok($dev->property_set("verbose", 1),
+    "set VERBOSE");
 
 # set 'em back to the defaults
 $dev->property_set("ndmp_username", "ndmp");
@@ -88,18 +87,21 @@ ok($dev->finish(),
     or diag $dev->error_or_status();
 
 is($dev->read_label(), $DEVICE_STATUS_SUCCESS,
-    "read label from device")
+    "read label from (same) device")
     or diag $dev->error_or_status();
 
 is($dev->volume_label, "TEST1",
     "volume label read back correctly");
 
+## try about the same thing, but open a new device in between
+
 # Write a label
-$dev = Amanda::Device->new("ndmp:localhost:$ndmp_port\@$tapefile");
+$dev = Amanda::Device->new("ndmp:127.0.0.1:$ndmp_port\@$tapefile");
 is($dev->status(), $DEVICE_STATUS_SUCCESS,
     "creation of an ndmp device succeeds with correct syntax");
 $dev->property_set("ndmp_username", "ndmp");
 $dev->property_set("ndmp_password", "ndmp");
+$dev->property_set("verbose", 1);
 
 # Write the label
 ok($dev->start($ACCESS_WRITE, "TEST2", "20090915000000"),
@@ -110,11 +112,12 @@ ok($dev->finish(),
     or diag $dev->error_or_status();
 
 # Read the label with a new device.
-$dev = Amanda::Device->new("ndmp:localhost:$ndmp_port\@$tapefile");
+$dev = Amanda::Device->new("ndmp:127.0.0.1:$ndmp_port\@$tapefile");
 is($dev->status(), $DEVICE_STATUS_SUCCESS,
     "creation of an ndmp device succeeds with correct syntax");
 $dev->property_set("ndmp_username", "ndmp");
 $dev->property_set("ndmp_password", "ndmp");
+$dev->property_set("verbose", 1);
 
 # read the label
 is($dev->read_label(), $DEVICE_STATUS_SUCCESS,

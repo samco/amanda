@@ -13,7 +13,7 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
 #
-# Contact information: Zmanda Inc., 465 N Mathlida Ave, Suite 300
+# Contact information: Zmanda Inc., 465 S. Mathilda Ave., Suite 300
 # Sunnyvale, CA 94085, USA, or: http://www.zmanda.com
 
 package Amanda::Changer;
@@ -404,6 +404,11 @@ started.
 This is the name of this slot.  It is an arbitrary string which will
 have some meaning to the changer's C<load()> method. It is safe to
 access this field after the reservation has been released.
+
+=head3 $res->{'barcode'}
+
+If this changer supports barcodes, then this is the barcode of the reserved
+volume.  This can be helpful for labeling tapes using their barcode.
 
 =head3 $res->release(finished_cb => $cb, eject => $eject)
 

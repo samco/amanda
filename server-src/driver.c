@@ -2640,6 +2640,13 @@ read_schedule(
 	    }
 	}
 	remove_disk(&waitq, dp);
+
+	if (dp->data_path == DATA_PATH_DIRECTTCP &&
+	    dp->to_holdingdisk == HOLD_AUTO) {
+	    /* planner already logged a warning. */
+	    dp->to_holdingdisk = HOLD_NEVER;
+	}
+
 	if (dp->to_holdingdisk == HOLD_NEVER) {
 	    enqueue_disk(&directq, dp);
 	} else {
@@ -3154,7 +3161,7 @@ dump_to_tape(
 
     taper_cmd(PORT_WRITE, dp, NULL, sched(dp)->level, sched(dp)->datestamp);
     cmd = getresult(taper, 1, &result_argc, &result_argv);
-    if(cmd != PORT) {
+    if (dp->data_path == DATA_PATH_AMANDA && cmd != PORT) {
 	g_printf(_("driver: did not get PORT from taper for %s:%s\n"),
 		dp->host->hostname, qname);
 	fflush(stdout);
@@ -3163,10 +3170,25 @@ dump_to_tape(
         amfree(qname);
 	return;	/* fatal problem */
     }
+    if (dp->data_path == DATA_PATH_DIRECTTCP && cmd != DIRECTTCP_PORT) {
+	g_printf(_("driver: did not get DIRECTTCP_PORT from taper for %s:%s\n"),
+		dp->host->hostname, qname);
+	fflush(stdout);
+	log_add(L_WARNING, _("driver: did not get DIRECTTCP_PORT from taper for %s:%s.\n"),
+	        dp->host->hostname, qname);
+        amfree(qname);
+	return;	/* fatal problem */
+    }
     amfree(qname);
 
     /* copy port number */
     dumper->output_port = atoi(result_argv[1]);
+    if (dp->data_path == DATA_PATH_DIRECTTCP) {
+	dp->directtcp_list = g_slist_append(dp->directtcp_list,
+					    stralloc(result_argv[2]));
+    } else {
+	dp->directtcp_list = NULL;
+    }
 
     dumper->dp = dp;
     dumper->chunker = NULL;
@@ -3187,6 +3209,8 @@ dump_to_tape(
     /* tell the dumper to dump to a port */
     dumper_cmd(dumper, PORT_DUMP, dp, NULL);
     dp->host->start_t = time(NULL) + 15;
+    g_slist_free_full(dp->directtcp_list);
+    dp->directtcp_list = NULL;
 
     /* update statistics & print state */
 

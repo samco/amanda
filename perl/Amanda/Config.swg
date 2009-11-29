@@ -14,7 +14,7 @@
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  *
- * Contact information: Zmanda Inc., 465 N Mathlida Ave, Suite 300
+ * Contact information: Zmanda Inc., 465 S. Mathilda Ave., Suite 300
  * Sunnyvale, CA 94085, USA, or: http://www.zmanda.com
  */
 
@@ -119,7 +119,6 @@ amglue_add_constant(CNF_RESERVED_UDP_PORT, confparm_key);
 amglue_add_constant(CNF_RESERVED_TCP_PORT, confparm_key);
 amglue_add_constant(CNF_UNRESERVED_TCP_PORT, confparm_key);
 amglue_add_constant(CNF_HOLDINGDISK, confparm_key);
-amglue_add_constant(CNF_NDMP_PROXY_PORT, confparm_key);
 amglue_copy_to_tag(confparm_key, getconf);
 
 amglue_add_enum_tag_fns(tapetype_key);
@@ -176,6 +175,7 @@ amglue_add_constant(DUMPTYPE_INDEX, dumptype_key);
 amglue_add_constant(DUMPTYPE_APPLICATION, dumptype_key);
 amglue_add_constant(DUMPTYPE_SCRIPTLIST, dumptype_key);
 amglue_add_constant(DUMPTYPE_PROPERTY, dumptype_key);
+amglue_add_constant(DUMPTYPE_DATA_PATH, dumptype_key);
 amglue_copy_to_tag(dumptype_key, getconf);
 
 amglue_add_enum_tag_fns(interface_key);
@@ -295,6 +295,11 @@ amglue_add_constant(SEND_AMREPORT_ERROR, send_amreport_on_t);
 amglue_add_constant(SEND_AMREPORT_NEVER, send_amreport_on_t);
 amglue_copy_to_tag(send_amreport_on_t, getconf);
 
+amglue_add_enum_tag_fns(data_path_t);
+amglue_add_constant(DATA_PATH_AMANDA, data_path_t);
+amglue_add_constant(DATA_PATH_DIRECTTCP, data_path_t);
+amglue_copy_to_tag(data_path_t, getconf);
+
 /*
  * val_t typemaps
  */
@@ -309,10 +314,11 @@ amglue_copy_to_tag(send_amreport_on_t, getconf);
  *  - CONFTYPE_TIME -> IV (epoch timestamp)
  *  - CONFTYPE_COMPRESS, CONFTYPE_ENCRYPT, CONFTYPE_ESTIMATELIST, CONFTYPE_STRATEGY,
  *    CONFTYPE_TAPERALGO, CONFTYPE_PRIORITY, CONFTYPE_HOLDING, CONFTYPE_EXECUTE_ON,
- *    CONFTYPE_EXECUTE_WHERE, SEND_AMREPORT_ON -> IV (enums)
+ *    CONFTYPE_EXECUTE_WHERE, CONFTYPE_SEND_AMREPORT_ON,
+ *    CONFTYPE_DATA_PATH -> IV (enums)
  *  - CONFTYPE_RATE -> list of two NVs
  *  - CONFTYPE_INTRANGE -> list of two IVs
- *  - CONFTYPE_EXINCLUDE -> hashref with keys 'list' (listref), 'file' (listref), 
+ *  - CONFTYPE_EXINCLUDE -> hashref with keys 'list' (listref), 'file' (listref),
  *    and 'optional' (int)
  *  - CONFTYPE_PROPLIST -> hashref of hashref with keys 'append' (IV), 'priority' (IV),
  *							'values' (listref)
@@ -413,6 +419,7 @@ amglue_copy_to_tag(send_amreport_on_t, getconf);
 	    case CONFTYPE_EXECUTE_ON:
 	    case CONFTYPE_EXECUTE_WHERE:
 	    case CONFTYPE_SEND_AMREPORT_ON:
+	    case CONFTYPE_DATA_PATH:
 	    case CONFTYPE_INT:
 		$result = sv_2mortal(amglue_newSVi64(val_t__int($1)));
 		argvi++;
@@ -423,7 +430,7 @@ amglue_copy_to_tag(send_amreport_on_t, getconf);
 		AV *elist = newAV();
 		estimatelist_t el;
 		for (el=val_t__estimatelist($1); el != NULL; el = el->next) {
-		    av_push(elist, amglue_newSVi64(GPOINTER_TO_INT(el->data)));
+		    av_push(elist, newSVuv(GPOINTER_TO_INT(el->data)));
 		}
 		$result = sv_2mortal(newRV_noinc((SV *)elist));
 		argvi++;
@@ -499,6 +506,8 @@ amglue_copy_to_tag(send_amreport_on_t, getconf);
     }
     g_strfreev($1);
 }
+
+data_path_t data_path_from_string(char *data);
 
 val_t *getconf(confparm_key key);
 gboolean getconf_seen(confparm_key key);

@@ -48,6 +48,7 @@ endif
 amlib_LTLIBRARIES = libamglue.la
 libamglue_la_SOURCES = \
 	amglue/ghashtable.c \
+	amglue/gerror.c \
 	amglue/bigint.c \
 	amglue/source.c \
 	amglue/objwrap.c \
@@ -91,6 +92,7 @@ PERL_EXT_LDFLAGS += $(PERLEXTLIBS)
 AMGLUE_SWG = amglue/amglue.swg \
 	amglue/amglue.swg \
 	amglue/constants.swg \
+	amglue/directtcp.swg \
 	amglue/dumpspecs.swg \
 	amglue/exports.swg \
 	amglue/filehandles.swg \
@@ -133,21 +135,6 @@ libArchive_la_LIBADD = libamglue.la \
 Amanda_DATA += Amanda/Archive.pm
 EXTRA_DIST += Amanda/Archive.swg Amanda/Archive.pm Amanda/Archive.pod
 MAINTAINERCLEANFILES += Amanda/Archive.c Amanda/Archive.pm
-
-if WANT_SERVER
-if WANT_NDMP
-# PACKAGE: Amanda::NDMP
-libNDMPdir = $(amperldir)/auto/Amanda/NDMP
-libNDMP_LTLIBRARIES = libNDMP.la
-libNDMP_la_SOURCES = Amanda/NDMP.c $(AMGLUE_SWG)
-libNDMP_la_LDFLAGS = $(PERL_EXT_LDFLAGS)
-libNDMP_la_LIBADD = libamglue.la \
-	$(top_builddir)/common-src/libamanda.la
-Amanda_DATA += Amanda/NDMP.pm
-MAINTAINERCLEANFILES += Amanda/NDMP.c Amanda/NDMP.pm
-endif
-endif
-EXTRA_DIST += Amanda/NDMP.swg Amanda/NDMP.pm
 
 if WANT_SERVER
 # PACKAGE: Amanda::Device

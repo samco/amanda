@@ -15,17 +15,11 @@
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  *
- * Contact information: Zmanda Inc., 465 N Mathlida Ave, Suite 300
+ * Contact information: Zmanda Inc., 465 S. Mathilda Ave., Suite 300
  * Sunnyvale, CA 94085, USA, or: http://www.zmanda.com
  */
 
-/* Base classes and interfaces for transfer elements.  There are two interfaces
- * defined here: IXferProducer and IXferConsumer.  The former is for elements
- * which produce data, and the latter is for those which consume it.  There is
- * a top-level XferElement base class, which all implementations subclass.
- *
- * Unless you're well-acquainted with GType and GObject, this file will be a
- * difficult read.  It is really only of use to those implementing new subclasses.
+/* Base classes for transfer elements.
  */
 
 #ifndef XFER_ELEMENT_H
@@ -35,6 +29,7 @@
 #include <glib-object.h>
 #include "xfer.h"
 #include "queueing.h"
+#include "directtcp.h"
 
 typedef enum {
     /* sources have no input mechanisms and destinations have no output
@@ -58,6 +53,16 @@ typedef enum {
     /* upstream element will call elt->downstream->push_buffer(buf) to push
      * a buffer.  EOF is indicated by passing a NULL buffer. */
     XFER_MECH_PUSH_BUFFER,
+
+    /* DirectTCP: upstream sends an array of IP:PORT addresses to which a
+     * TCP connection should be made, then downstream connects to one of the
+     * addreses and sends the data over that connection */
+    XFER_MECH_DIRECTTCP_LISTEN,
+
+    /* (XFER_MECH_DIRECTTCP_CONNECT is not impossible, but not implemented now) */
+
+    /* (sentinel value) */
+    XFER_MECH_MAX,
 } xfer_mech;
 
 /* Description of a pair (input, output) of xfer mechanisms that an
@@ -117,6 +122,12 @@ typedef struct XferElement {
     gint input_fd;
     gint output_fd;
 
+    /* array of IP:PORT pairs that can be used to connect to this element,
+     * terminated by a 0.0.0.0:0.  This is set by elements with an input mech
+     * of XFER_MECH_DIRECTTCP_LISTEN and accessed by their upstream neighbor. */
+
+    DirectTCPAddr *input_listen_addrs;
+
     /* cache for repr() */
     char *repr;
 } XferElement;
@@ -139,10 +150,12 @@ typedef struct {
      */
     char *(*repr)(XferElement *elt);
 
-    /* Set up this element.  This function is called for all elements in a transfer
-     * before start() is called for any elements.  For mechanisms where this element
-     * supplies a file descriptor, it should set its input_fd and/or output_fd
-     * appropriately; neighboring elements will use that value in start().
+    /* Set up this element.  This function is called for all elements in a
+     * transfer before start() is called for any elements.  For mechanisms
+     * where this element supplies a file descriptor, it should set its
+     * input_fd and/or output_fd appropriately; neighboring elements will use
+     * that value in start().  Elements which supply IP:PORT pairs should set
+     * their input_addrs, for neighboring elements to use in start().
      *
      * elt->input_mech and elt->output_mech are already set when this function
      * is called, but upstream and downstream are not.
@@ -151,9 +164,10 @@ typedef struct {
      */
     void (*setup)(XferElement *elt);
 
-    /* Start transferring data.  The element downstream of this one will already be
-     * started, while the upstream element will not, so data will not begin flowing
-     * immediately.
+    /* Start transferring data.  The element downstream of this one will
+     * already be started, while the upstream element will not, so data will
+     * not begin flowing immediately.  It is safe to access attributes of
+     * neighboring elements during this call.
      *
      * @param elt: the XferElement
      * @return: TRUE if this element will send XMSG_DONE
@@ -170,9 +184,10 @@ typedef struct {
      * If expect_eof is TRUE, then this element should expect an EOF from its
      * upstream element, and should drain any remaining data until that EOF
      * arrives and generate an EOF to the downstream element.  The utility
-     * functions xfer_element_drain_by_reading and xfer_element_drain_by_pulling may be useful for this
-     * purpose. This draining is important in order to avoid hung threads or
-     * unexpected SIGPIPEs.
+     * functions xfer_element_drain_by_reading and
+     * xfer_element_drain_by_pulling may be useful for this purpose. This
+     * draining is important in order to avoid hung threads or unexpected
+     * SIGPIPEs.
      *
      * If expect_eof is FALSE, then the upstream elements are unable to
      * generate an early EOF, so this element should *not* attempt to drain any
@@ -325,6 +340,15 @@ XferElement *xfer_source_pattern(guint64 length, void * pattern,
 XferElement * xfer_source_fd(
     int fd);
 
+/* A transfer source that exposes its listening DirectTCPAddrs (via
+ * elt->input_listen_addrs) for external use
+ *
+ * Implemented in source-directtcp-listen.c
+ *
+ * @return: new element
+ */
+XferElement * xfer_source_directtcp_listen(void);
+
 /* A transfer filter that executes an external application, feeding it data on
  * stdin and taking the results on stdout.
  *
@@ -373,5 +397,29 @@ XferElement *xfer_dest_null(
  */
 XferElement *xfer_dest_fd(
     int fd);
+
+/* A transfer destination that writes bytes to an in-memory buffer.
+ *
+ * Implemented in dest-buffer.c
+ *
+ * @param max_size: maximum size for the buffer, or zero for no limit
+ * @return: new element
+ */
+XferElement *xfer_dest_buffer(
+    gsize max_size);
+
+/* Get the buffer and size from an XferDestBuffer.  The resulting buffer
+ * will remain allocated until the XDB itself is freed.
+ *
+ * Implemented in dest-buffer.c
+ *
+ * @param elt: the element
+ * @param buf (output): buffer pointer
+ * @param size (output): buffer size
+ */
+void xfer_dest_buffer_get(
+    XferElement *elt,
+    gpointer *buf,
+    gsize *size);
 
 #endif

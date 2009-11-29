@@ -15,7 +15,7 @@
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  *
- * Contact information: Zmanda Inc., 465 N Mathlida Ave, Suite 300
+ * Contact information: Zmanda Inc., 465 S. Mathilda Ave., Suite 300
  * Sunnyvale, CA 94085, USA, or: http://www.zmanda.com
  */
 
@@ -266,6 +266,7 @@ setup_impl(
 	    break;
 
 	case XFER_MECH_NONE:
+	default:
 	    g_assert_not_reached();
 	    break;
 	}
@@ -294,6 +295,7 @@ setup_impl(
 	    break;
 
 	case XFER_MECH_NONE:
+	default:
 	    g_assert_not_reached();
 	    break;
 	}
@@ -321,6 +323,7 @@ setup_impl(
 	    break;
 
 	case XFER_MECH_NONE:
+	default:
 	    g_assert_not_reached();
 	    break;
 	}
@@ -348,12 +351,14 @@ setup_impl(
 	    break;
 
 	case XFER_MECH_NONE:
+	default:
 	    g_assert_not_reached();
 	    break;
 	}
 	break;
 
     case XFER_MECH_NONE:
+    default:
 	g_assert_not_reached();
 	break;
     }

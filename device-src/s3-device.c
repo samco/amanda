@@ -14,7 +14,7 @@
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  *
- * Contact information: Zmanda Inc., 465 N Mathlida Ave, Suite 300
+ * Contact information: Zmanda Inc., 465 S. Mathilda Ave., Suite 300
  * Sunnyvale, CA 94085, USA, or: http://www.zmanda.com
  */
 
@@ -24,6 +24,7 @@
  * blocks.
  */
 
+#include "amanda.h"
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -32,7 +33,6 @@
 #include <regex.h>
 #include <time.h>
 #include "util.h"
-#include "amanda.h"
 #include "conffile.h"
 #include "device.h"
 #include "s3.h"
@@ -1214,6 +1214,8 @@ s3_device_start_file (Device *pself, dumpfile_t *jobInfo) {
     char *key;
 
     if (device_in_error(self)) return FALSE;
+
+    pself->is_eom = FALSE;
 
     /* Set the blocksize to zero, since there's no header to skip (it's stored
      * in a distinct file, rather than block zero) */

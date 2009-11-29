@@ -55,9 +55,8 @@ GLOBAL int		n_noop;
 GLOBAL int		v_verbose;
 GLOBAL int		o_no_time_stamps;
 GLOBAL char *		o_config_file;
+GLOBAL char *		o_tape_tcp;
 GLOBAL char *		o_load_files_file;
-
-GLOBAL FILE *		log_fp;
 
 extern void		error_byebye (char *fmt, ...);
 
@@ -76,7 +75,6 @@ extern int		copy_args_expanding_macros (int argc, char *argv[],
 extern int		lookup_and_snarf (char *av[], char *name);
 extern int		snarf_macro (char *av[], char *val);
 
-extern int		start_log_file (void);
 extern void		ndmjob_log_deliver(struct ndmlog *log, char *tag,
 					int lev, char *msg);
 

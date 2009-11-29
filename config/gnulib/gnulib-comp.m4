@@ -27,6 +27,8 @@ AC_DEFUN([gl_EARLY],
   AC_REQUIRE([AC_PROG_RANLIB])
   AC_REQUIRE([AM_PROG_CC_C_O])
   AC_REQUIRE([gl_USE_SYSTEM_EXTENSIONS])
+  AC_REQUIRE([AC_FUNC_FSEEKO])
+  AC_REQUIRE([AC_FUNC_FSEEKO])
   gl_THREADLIB_EARLY
 ])
 
@@ -49,7 +51,11 @@ AC_DEFUN([gl_INIT],
   gl_FUNC_BASE64
   AC_REQUIRE([gl_HEADER_ERRNO_H])
   gl_FLOAT_H
+  gl_FUNC_FSEEKO
+  gl_STDIO_MODULE_INDICATOR([fseeko])
   gl_FSUSAGE
+  gl_FUNC_FTELLO
+  gl_STDIO_MODULE_INDICATOR([ftello])
   gl_FUNC_FTRUNCATE
   gl_UNISTD_MODULE_INDICATOR([ftruncate])
   gl_GETADDRINFO
@@ -239,8 +245,10 @@ AC_DEFUN([gl_FILE_LIST], [
   lib/errno.in.h
   lib/float+.h
   lib/float.in.h
+  lib/fseeko.c
   lib/fsusage.c
   lib/fsusage.h
+  lib/ftello.c
   lib/ftruncate.c
   lib/full-read.c
   lib/full-read.h
@@ -277,6 +285,7 @@ AC_DEFUN([gl_FILE_LIST], [
   lib/snprintf.c
   lib/stdbool.in.h
   lib/stdint.in.h
+  lib/stdio-impl.h
   lib/stdio-write.c
   lib/stdio.in.h
   lib/stdlib.in.h
@@ -298,7 +307,9 @@ AC_DEFUN([gl_FILE_LIST], [
   m4/errno_h.m4
   m4/extensions.m4
   m4/float_h.m4
+  m4/fseeko.m4
   m4/fsusage.m4
+  m4/ftello.m4
   m4/ftruncate.m4
   m4/getaddrinfo.m4
   m4/getopt.m4

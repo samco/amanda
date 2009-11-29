@@ -14,13 +14,14 @@
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  *
- * Contact information: Zmanda Inc., 465 N Mathlida Ave, Suite 300
+ * Contact information: Zmanda Inc., 465 S. Mathilda Ave., Suite 300
  * Sunnyvale, CA 94085, USA, or: http://www.zmanda.com
  */
 
 #ifndef AMANDA_AMGLUE_H
 #define AMANDA_AMGLUE_H
 
+#include "../config/config.h"
 #include "EXTERN.h"
 #include "perl.h"
 #include "XSUB.h"
@@ -91,6 +92,20 @@ SV *g_hash_table_to_hashref_gslist(GHashTable *hash);
  * @returns: Perl hashref
  */
 SV *g_hash_table_to_hashref_property(GHashTable *hash);
+
+/*
+ * prototypes for gerror.c
+ */
+
+/* Call perl's croak (die) for a GError (if there is one)
+ *
+ * @note This is not thread-safe
+ * @note This function does not return if error is non-NULL
+ *
+ * @param domain: String to prefix to error message (followed by ": ")
+ * @param error: The GError pointer
+ */
+void croak_gerror(const char *domain, GError **error);
 
 /*
  * prototypes for bigint.c

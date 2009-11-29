@@ -39,6 +39,9 @@
  * NORMAL
  * IGNORE
  * STRANGE
+ * INCLUDE-LIST		(for restore only)
+ * EXCLUDE-LIST		(for restore only)
+ * DIRECTORY
  */
 
 #include "amanda.h"
@@ -121,11 +124,12 @@ static GPtrArray *amstar_build_argv(application_argument_t *argument,
 				int level,
 				int command);
 
-char *star_path;
-char *star_tardumps;
-int   star_dle_tardumps;
-int   star_onefilesystem;
-int   star_sparse;
+static char *star_path;
+static char *star_tardumps;
+static int   star_dle_tardumps;
+static int   star_onefilesystem;
+static int   star_sparse;
+static char *star_directory;
 static GSList *normal_message = NULL;
 static GSList *ignore_message = NULL;
 static GSList *strange_message = NULL;
@@ -149,6 +153,9 @@ static struct option long_options[] = {
     {"normal"          , 1, NULL, 16},
     {"ignore"          , 1, NULL, 17},
     {"strange"         , 1, NULL, 18},
+    {"include-list"    , 1, NULL, 19},
+    {"exclude-list"    , 1, NULL, 20},
+    {"directory"       , 1, NULL, 21},
 
     { NULL, 0, NULL, 0}
 };
@@ -172,6 +179,7 @@ main(
     star_dle_tardumps = 0;
     star_onefilesystem = 1;
     star_sparse = 1;
+    star_directory = NULL;
 
     /* initialize */
 
@@ -295,12 +303,28 @@ main(
                      strange_message =
                          g_slist_append(strange_message, optarg);
                  break;
+	case 19: if (optarg)
+		     argument.dle.include_list =
+			 append_sl(argument.dle.include_list, optarg);
+		 break;
+	case 20: if (optarg)
+		     argument.dle.exclude_list =
+			 append_sl(argument.dle.exclude_list, optarg);
+		 break;
+	case 21: if (optarg)
+		     star_directory = stralloc(optarg);
+		 break;
 
 	case ':':
 	case '?':
 		break;
 	}
     }
+
+    if (!argument.dle.disk && argument.dle.device)
+	argument.dle.disk = stralloc(argument.dle.device);
+    if (!argument.dle.device && argument.dle.disk)
+	argument.dle.device = stralloc(argument.dle.disk);
 
     argument.argc = argc - optind;
     argument.argv = argv + optind;
@@ -354,7 +378,7 @@ amstar_support(
     fprintf(stdout, "MESSAGE-XML NO\n");
     fprintf(stdout, "RECORD YES\n");
     fprintf(stdout, "INCLUDE-FILE NO\n");
-    fprintf(stdout, "INCLUDE-LIST NO\n");
+    fprintf(stdout, "INCLUDE-LIST YES\n");
     fprintf(stdout, "EXCLUDE-FILE YES\n");
     fprintf(stdout, "EXCLUDE-LIST YES\n");
     fprintf(stdout, "COLLECTION NO\n");
@@ -377,6 +401,20 @@ amstar_selfcheck(
 	char *qdevice = quote_string(argument->dle.device);
 	fprintf(stdout, "OK %s\n", qdevice);
 	amfree(qdevice);
+    }
+    if (star_directory) {
+	char *qdirectory = quote_string(star_directory);
+	fprintf(stdout, "OK %s\n", qdirectory);
+	amfree(qdirectory);
+    }
+
+    if (argument->dle.include_list &&
+	argument->dle.include_list->nb_element >= 0) {
+	fprintf(stdout, "ERROR include-list not supported for backup\n");
+    }
+    if (argument->dle.exclude_list &&
+	argument->dle.exclude_list->nb_element >= 0) {
+	fprintf(stdout, "ERROR exclude-list not supported for backup\n");
     }
 
     if (!star_path) {
@@ -434,11 +472,24 @@ amstar_estimate(
 	error(_("No device argument"));
     }
 
+    if (argument->dle.include_list &&
+	argument->dle.include_list->nb_element >= 0) {
+	fprintf(stderr, "ERROR include-list not supported for backup\n");
+    }
+    if (argument->dle.exclude_list &&
+	argument->dle.exclude_list->nb_element >= 0) {
+	fprintf(stderr, "ERROR exclude-list not supported for backup\n");
+    }
+
     qdisk = quote_string(argument->dle.disk);
     if (argument->calcsize) {
 	char *dirname;
 
-	dirname = amname_to_dirname(argument->dle.device);
+	if (star_directory) {
+	    dirname = amname_to_dirname(star_directory);
+	} else {
+	    dirname = amname_to_dirname(argument->dle.device);
+	}
 	run_calcsize(argument->config, "STAR", argument->dle.disk, dirname,
 		     argument->level, NULL, NULL);
 	return;
@@ -606,6 +657,15 @@ amstar_backup(
 	error(_("No device argument"));
     }
 
+    if (argument->dle.include_list &&
+	argument->dle.include_list->nb_element >= 0) {
+	fprintf(mesgstream, "? include-list not supported for backup\n");
+    }
+    if (argument->dle.exclude_list &&
+	argument->dle.exclude_list->nb_element >= 0) {
+	fprintf(mesgstream, "? exclude-list not supported for backup\n");
+    }
+
     level = GPOINTER_TO_INT(argument->level->data);
 
     qdisk = quote_string(argument->dle.disk);
@@ -745,6 +805,24 @@ amstar_restore(
     cmd = stralloc(star_path);
 
     g_ptr_array_add(argv_ptr, stralloc(star_path));
+    if (star_directory) {
+	struct stat stat_buf;
+	if(stat(star_directory, &stat_buf) != 0) {
+	    fprintf(stderr,"can not stat directory %s: %s\n", star_directory, strerror(errno));
+	    exit(1);
+	}
+	if (!S_ISDIR(stat_buf.st_mode)) {
+	    fprintf(stderr,"%s is not a directory\n", star_directory);
+	    exit(1);
+	}
+	if (access(star_directory, W_OK) != 0 ) {
+	    fprintf(stderr, "Can't write to %s: %s\n", star_directory, strerror(errno));
+	    exit(1);
+	}
+
+	g_ptr_array_add(argv_ptr, stralloc("-C"));
+	g_ptr_array_add(argv_ptr, stralloc(star_directory));
+    }
     g_ptr_array_add(argv_ptr, stralloc("-x"));
     g_ptr_array_add(argv_ptr, stralloc("-v"));
     g_ptr_array_add(argv_ptr, stralloc("-xattr"));
@@ -754,10 +832,24 @@ amstar_restore(
     g_ptr_array_add(argv_ptr, stralloc("-f"));
     g_ptr_array_add(argv_ptr, stralloc("-"));
 
+    if (argument->dle.exclude_list &&
+	argument->dle.exclude_list->nb_element == 1) {
+	g_ptr_array_add(argv_ptr, stralloc("-exclude-from"));
+	g_ptr_array_add(argv_ptr,
+			stralloc(argument->dle.exclude_list->first->name));
+    }
+
+    if (argument->dle.include_list &&
+	argument->dle.include_list->nb_element == 1) {
+	g_ptr_array_add(argv_ptr,
+			stralloc2("list=",
+				  argument->dle.include_list->first->name));
+    }
     for (j=1; j< argument->argc; j++)
 	g_ptr_array_add(argv_ptr, stralloc(argument->argv[j]+2));/*remove ./ */
     g_ptr_array_add(argv_ptr, NULL);
 
+    debug_executing(argv_ptr);
     env = safe_env();
     become_root();
     execve(cmd, (char **)argv_ptr->pdata, env);
@@ -790,6 +882,7 @@ amstar_validate(
     g_ptr_array_add(argv_ptr, stralloc("-"));
     g_ptr_array_add(argv_ptr, NULL);
 
+    debug_executing(argv_ptr);
     env = safe_env();
     execve(cmd, (char **)argv_ptr->pdata, env);
     e = strerror(errno);
@@ -813,7 +906,11 @@ static GPtrArray *amstar_build_argv(
     char      *s;
     char      *tardumpfile;
 
-    dirname = amname_to_dirname(argument->dle.device);
+    if (star_directory) {
+	dirname = amname_to_dirname(star_directory);
+    } else {
+	dirname = amname_to_dirname(argument->dle.device);
+    }
     fsname = vstralloc("fs-name=", dirname, NULL);
     for (s = fsname; *s != '\0'; s++) {
 	if (iscntrl((int)*s))

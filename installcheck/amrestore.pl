@@ -13,7 +13,7 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
 #
-# Contact information: Zmanda Inc, 465 S Mathlida Ave, Suite 300
+# Contact information: Zmanda Inc, 465 S. Mathilda Ave., Suite 300
 # Sunnyvale, CA 94086, USA, or: http://www.zmanda.com
 
 use Test::More tests => 34;
@@ -197,7 +197,7 @@ is($hdr_size, $orig_size + Amanda::Holding::DISK_BLOCK_BYTES,
 
 # find the holding files
 config_init($CONFIG_INIT_EXPLICIT_NAME, "TESTCONF");
-@filenames = sort(Amanda::Holding::files());
+@filenames = sort(+Amanda::Holding::files());
 is(scalar @filenames, 2, "two holding files found") or die("holding is not what I thought");
 my $holding_filename = $filenames[0];
 

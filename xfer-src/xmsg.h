@@ -14,7 +14,7 @@
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  *
- * Contact information: Zmanda Inc., 465 N Mathlida Ave, Suite 300
+ * Contact information: Zmanda Inc., 465 S. Mathilda Ave., Suite 300
  * Sunnyvale, CA 94085, USA, or: http://www.zmanda.com
  */
 
@@ -85,6 +85,7 @@ typedef enum {
      * Attributes:
      *  - successful (true if the whole part was written; always false for
      *		XferSourceTaper)
+     *  - eom (true if the device is at EOM; always false for XferSourceTaper)
      *  - eof (recipient should not call start_part; always false for
      *		XferSourceTaper)
      *  - size (bytes written to or read from the volume)
@@ -131,7 +132,7 @@ typedef struct XMsg {
      *  - add the attribute to the XMsg struct in xmsg.h
      *  - add the attribute to the comments for the appropriate xmsg_types
      *  - free the attribute in xmsg_free.
-     *  - edit perl/Amanda/Xfer.swg:xmsg_to_sv
+     *  - edit perl/Amanda/Xfer.swg:new_sv_for_xmsg
      */
 
     /* free-form string message for display to the users
@@ -144,6 +145,9 @@ typedef struct XMsg {
 
     /* true indicates a successful operation */
     gboolean successful;
+
+    /* true if an EOM condition has occurred */
+    gboolean eom;
 
     /* true if an EOF condition has occurred */
     gboolean eof;

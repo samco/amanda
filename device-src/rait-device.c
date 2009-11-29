@@ -14,7 +14,7 @@
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  *
- * Contact information: Zmanda Inc., 465 N Mathlida Ave, Suite 300
+ * Contact information: Zmanda Inc., 465 S. Mathilda Ave., Suite 300
  * Sunnyvale, CA 94085, USA, or: http://www.zmanda.com
  */
 
@@ -1566,14 +1566,15 @@ rait_device_write_block (Device * dself, guint size, gpointer data) {
 
     if (!success) {
 	/* TODO be more specific here */
-	/* TODO: handle EOF here -- if one or more (or two or more??)
-	 * children have is_eof* set, then reflect that in our error
-	 * status, and finish_file all of the non-EOF children. What's
-	 * more fun is when one device fails and must be isolated at
+	/* TODO: handle EOM here -- if one or more (or two or more??)
+	 * children have is_eom set, then reflect that in our error
+	 * status. What's more fun is when one device fails and must be isolated at
 	 * the same time another hits EOF. */
 	device_set_error(dself,
 	    stralloc("One or more devices failed to write_block"),
 	    DEVICE_STATUS_DEVICE_ERROR);
+        /* this is EOM or an error, so call it EOM */
+        dself->is_eom = TRUE;
         return FALSE;
     } else {
         dself->block ++;

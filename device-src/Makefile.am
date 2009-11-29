@@ -7,9 +7,14 @@ include $(top_srcdir)/config/automake/precompile.am
 INCLUDES =	-I$(top_builddir)/common-src \
 		-I$(top_srcdir)/common-src \
 		-I$(top_srcdir)/xfer-src \
+		-I$(top_srcdir)/ndmp-src \
 		-I$(top_srcdir)/gnulib
 
 AM_CFLAGS = $(AMANDA_WARNING_CFLAGS)
+if GCC_COMPILER
+# ndmp-device.c includes files with old-skool prototypes, so:
+AM_CFLAGS += -Wno-strict-prototypes
+endif
 AM_LDFLAGS = $(AMANDA_STATIC_LDFLAGS)
 
 sbin_PROGRAMS =
@@ -27,12 +32,14 @@ libamdevice_la_SOURCES = \
 	property.c \
 	device.c \
 	device-queueing.c \
+	directtcp-connection.c \
 	null-device.c \
 	rait-device.c \
 	vfs-device.c \
 	xfer-source-device.c \
 	xfer-dest-device.c \
 	xfer-dest-taper.c \
+	xfer-dest-taper-splitter.c \
 	xfer-source-taper.c
 libamdevice_la_LIBADD = \
 	../common-src/libamanda.la \
@@ -70,6 +77,7 @@ endif
 
 if WANT_NDMP_DEVICE
 libamdevice_la_SOURCES += ndmp-device.c
+libamdevice_la_LIBADD += ../ndmp-src/libndmlib.la
 endif
 
 ## automake-style tests
@@ -94,6 +102,7 @@ endif
 noinst_HEADERS = \
 	device-queueing.h \
 	device.h \
+	directtcp-connection.h \
 	property.h \
 	s3.h \
 	s3-util.h \

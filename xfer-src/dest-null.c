@@ -15,7 +15,7 @@
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  *
- * Contact information: Zmanda Inc., 465 N Mathlida Ave, Suite 300
+ * Contact information: Zmanda Inc., 465 S. Mathilda Ave., Suite 300
  * Sunnyvale, CA 94085, USA, or: http://www.zmanda.com
  */
 
@@ -51,6 +51,7 @@ typedef struct XferDestNull {
 
     gboolean do_verify;
     simpleprng_state_t prng;
+    guint64 byte_position;
 } XferDestNull;
 
 /*
@@ -79,12 +80,14 @@ push_buffer_impl(
     if (self->do_verify && !elt->cancelled) {
 	if (!simpleprng_verify_buffer(&self->prng, buf, len)) {
 	    xfer_element_handle_error(elt,
-		_("verification of incoming bytestream failed"));
+		_("verification of incoming bytestream failed; failed buffer starts at byte position %ju"),
+		(uintmax_t)self->byte_position);
 	    amfree(buf);
 	    return;
 	}
     }
 
+    self->byte_position += len;
     if (!self->sent_info) {
 	/* send a superfluous message (this is a testing XferElement,
 	 * after all) */

@@ -14,7 +14,7 @@
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  *
- * Contact information: Zmanda Inc., 465 N Mathlida Ave, Suite 300
+ * Contact information: Zmanda Inc., 465 S. Mathilda Ave., Suite 300
  * Sunnyvale, CA 94085, USA, or: http://www.zmanda.com
  */
 
@@ -499,6 +499,7 @@ typedef struct Device {
 	char * device_name(void) { return self->device_name; }
 	DeviceAccessMode access_mode(void) { return self->access_mode; }
 	gboolean is_eof(void) { return self->is_eof; }
+	gboolean is_eom(void) { return self->is_eom; }
 	char * volume_label(void) { return self->volume_label; }
 	char * volume_time(void) { return self->volume_time; }
 	DeviceStatusFlags status(void) { return self->status; }

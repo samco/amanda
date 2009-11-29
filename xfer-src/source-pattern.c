@@ -15,7 +15,7 @@
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  *
- * Contact information: Zmanda Inc., 465 N Mathlida Ave, Suite 300
+ * Contact information: Zmanda Inc., 465 S. Mathilda Ave., Suite 300
  * Sunnyvale, CA 94085, USA, or: http://www.zmanda.com
  */
 
@@ -105,7 +105,7 @@ pull_buffer_impl(
     d = rval;
     while (l--) {
 	*(d++) = *(s + offset++);
-	if (offset > self->pattern_buffer_length) offset = 0;
+	if (offset >= self->pattern_buffer_length) offset = 0;
     }
     self->current_offset = offset;
 

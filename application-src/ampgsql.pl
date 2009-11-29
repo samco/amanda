@@ -14,7 +14,7 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
 #
-# Contact information: Zmanda Inc., 465 S Mathlida Ave, Suite 300
+# Contact information: Zmanda Inc., 465 S. Mathilda Ave., Suite 300
 # Sunnyvale, CA 94086, USA, or: http://www.zmanda.com
 
 use lib '@amperldir@';
@@ -37,7 +37,7 @@ use Amanda::Constants;
 use Amanda::Config qw( :init :getconf  config_dir_relative string_to_boolean );
 use Amanda::Debug qw( :logging );
 use Amanda::Paths;
-use Amanda::Util qw( :constants );
+use Amanda::Util qw( :constants :encoding );
 
 my $_DATA_DIR_TAR = "data_dir.tar";
 my $_ARCHIVE_DIR_TAR = "archive_dir.tar";
@@ -61,6 +61,12 @@ sub new {
     # So, this only works for restore at the moment
     $self->{'args'}->{'gnutar-path'} ||= $Amanda::Constants::GNUTAR;
 
+    if (!defined $self->{'args'}->{'disk'}) {
+	$self->{'args'}->{'disk'} = $self->{'args'}->{'device'};
+    }
+    if (!defined $self->{'args'}->{'device'}) {
+	$self->{'args'}->{'device'} = $self->{'args'}->{'disk'};
+    }
     # default properties
     $self->{'props'} = {
         'pg-db' => 'template1',
@@ -277,24 +283,10 @@ sub command_selfcheck {
     }
 }
 
-sub _encode {
-    my $str = shift @_;
-    return '' unless $str;
-    $str =~ s/([^A-Za-z0-9])/sprintf("%%%02x", ord($1))/eg;
-    $str;
-}
-
-sub _decode {
-    my $str = shift @_;
-    return '' unless $str;
-    $str =~ s/%(..)/chr(hex($1))/eg;
-    $str;
-}
-
 sub _state_filename {
     my ($self, $level) = @_;
 
-    my @parts = ("ampgsql", _encode($self->{'args'}->{'host'}), _encode($self->{'args'}->{'disk'}), $level);
+    my @parts = ("ampgsql", hexencode($self->{'args'}->{'host'}), hexencode($self->{'args'}->{'disk'}), $level);
     $self->{'args'}->{'statedir'} . '/'  . join("-", @parts);
 }
 
@@ -625,6 +617,18 @@ sub command_restore {
    my $self = shift;
 
    chdir(Amanda::Util::get_original_cwd());
+   if (defined $self->{'args'}->{directory}) {
+      if (!-d $self->{'args'}->{directory}) {
+	 $self->print_to_server_and_die("Directory $self->{directory}: $!",
+					$Amanda::Script_App::ERROR);
+      }
+      if (!-w $self->{'args'}->{directory}) {
+	 $self->print_to_server_and_die("Directory $self->{directory}: $!",
+					$Amanda::Script_App::ERROR);
+      }
+      chdir($self->{'args'}->{directory});
+   }
+
    if (!-d $_ARCHIVE_DIR_RESTORE) {
        mkdir($_ARCHIVE_DIR_RESTORE) or confess("could not create archive WAL directory: $!");
    }
@@ -662,10 +666,13 @@ sub command_validate {
 
    my(@cmd) = ($self->{'args'}->{'gnutar-path'}, "-tf", "-");
    debug("cmd:" . join(" ", @cmd));
-   my $pid = open3('>&STDIN', '>&STDOUT', '>&STDERR', @cmd) || $self->print_to_server_and_die( "validate", "Unable to run @cmd", $Amanda::Application::ERROR);
+   my $pid = open3('>&STDIN', '>&STDOUT', '>&STDERR', @cmd) ||
+      $self->print_to_server_and_die("Unable to run @cmd",
+				     $Amanda::Application::ERROR);
    waitpid $pid, 0;
    if ($? != 0){
-       $self->print_to_server_and_die("validate", "$self->{gnutar} returned error", $Amanda::Application::ERROR);
+       $self->print_to_server_and_die("$self->{gnutar} returned error",
+				      $Amanda::Application::ERROR);
    }
    exit($self->{error_status});
 }
@@ -693,6 +700,9 @@ GetOptions(
     'collection=s',
     'record',
     'calcsize',
+    'exclude-list=s@',
+    'include-list=s@',
+    'directory=s',
     # ampgsql-specific
     'statedir=s',
     'tmpdir=s',

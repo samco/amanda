@@ -1368,6 +1368,33 @@ start_server_check(
 			      hostp->hostname, dp->name);
 		    pgmbad = 1;
 		}
+
+		if (dp->data_path == DATA_PATH_DIRECTTCP) {
+		    if (dp->compress != COMP_NONE) {
+			g_fprintf(outf,
+				  _("ERROR: %s %s: Can't compress directtcp data-path\n"),
+				  hostp->hostname, dp->name);
+			pgmbad = 1;
+		    }
+		    if (dp->encrypt != ENCRYPT_NONE) {
+			g_fprintf(outf,
+				  _("ERROR: %s %s: Can't encrypt directtcp data-path\n"),
+				  hostp->hostname, dp->name);
+			pgmbad = 1;
+		    }
+		    if (dp->to_holdingdisk == HOLD_REQUIRED) {
+			g_fprintf(outf,
+				  _("ERROR: %s %s: Holding disk can't be use for directtcp data-path\n"),
+				  hostp->hostname, dp->name);
+			pgmbad = 1;
+		    } else if (dp->to_holdingdisk == HOLD_AUTO) {
+			g_fprintf(outf,
+				  _("WARNING: %s %s: Holding disk can't be use for directtcp data-path\n"),
+				  hostp->hostname, dp->name);
+			pgmbad = 1;
+		    }
+		}
+
 		amfree(disk);
 		remove_disk(&origq, dp);
 	    }
@@ -1523,10 +1550,11 @@ start_host(
 	    if(dp->up != DISK_READY || dp->todo != 1) {
 		continue;
 	    }
-	    if (am_has_feature(hostp->features, fe_req_xml))
+	    if (am_has_feature(hostp->features, fe_req_xml)) {
 		o = xml_optionstr(dp, hostp->features, outf, 0);
-	    else
+	    } else {
 		o = optionstr(dp, hostp->features, outf);
+	    }
 	    if (o == NULL) {
 	        remote_errors++;
 		continue;
@@ -1572,6 +1600,18 @@ start_host(
 		    g_fprintf(outf, _("You must upgrade amanda on the client to "
 				    "specify a diskdevice in the disklist"	
 				    " or don't specify a diskdevice in the disklist.\n"));	
+		}
+
+		if (dp->data_path != DATA_PATH_AMANDA &&
+		    !am_has_feature(hostp->features, fe_xml_data_path)) {
+		    g_fprintf(outf,
+			      _("ERROR: Client %s does not support %s data-path\n"),
+			      hostp->hostname,  data_path_to_string(dp->data_path));
+		} else if (dp->data_path == DATA_PATH_DIRECTTCP &&
+		    !am_has_feature(hostp->features, fe_xml_directtcp_list)) {
+		    g_fprintf(outf,
+			      _("ERROR: Client %s does not support directtcp data-path\n"),
+			      hostp->hostname);
 		}
 	    }
 	    if (dp->program &&
@@ -1687,7 +1727,7 @@ start_host(
 			    g_fprintf(outf,
 			      _("ERROR: application '%s' not found.\n"), dp->application);
 			} else {
-			    xml_app = xml_application(application, hostp->features);
+			    xml_app = xml_application(dp, application, hostp->features);
 			    vstrextend(&l, xml_app, NULL);
 			    amfree(xml_app);
 			}

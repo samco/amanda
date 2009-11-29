@@ -14,13 +14,14 @@
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  *
- * Contact information: Zmanda Inc., 465 N Mathlida Ave, Suite 300
+ * Contact information: Zmanda Inc., 465 S. Mathilda Ave., Suite 300
  * Sunnyvale, CA 94085, USA, or: http://www.zmanda.com
  */
 
 %module "Amanda::Xfer"
 %include "amglue/amglue.swg"
 %include "exception.i"
+%include "cstring.i"
 %import "Amanda/MainLoop.swg"
 
 %include "Xfer.pod"
@@ -135,6 +136,9 @@ new_sv_for_xmsg(
 
     /* successful */
     hv_store(hash, "successful", 10, newSViv(msg->successful), 0);
+
+    /* eom */
+    hv_store(hash, "eom", 3, newSViv(msg->eom), 0);
 
     /* eof */
     hv_store(hash, "eof", 3, newSViv(msg->eof), 0);
@@ -311,7 +315,7 @@ XferElement *xfer_source_random(
      * care of freeing this array, so we don't have to */
 }
 
-%newobject xfer_source_random;
+%newobject xfer_source_pattern;
 XferElement *xfer_source_pattern(
     guint64 length,
     void * pattern,
@@ -320,6 +324,16 @@ XferElement *xfer_source_pattern(
 %newobject xfer_source_fd;
 XferElement *xfer_source_fd(
     int fd);
+
+%newobject xfer_source_directtcp_listen;
+XferElement *xfer_source_directtcp_listen(void);
+
+%inline %{
+static DirectTCPAddr *
+xfer_source_directtcp_listen_get_addrs(XferElement *elt) {
+    return elt->input_listen_addrs;
+}
+%}
 
 %newobject xfer_filter_xor;
 XferElement *xfer_filter_xor(
@@ -333,6 +347,16 @@ XferElement *xfer_filter_process(
 %newobject xfer_dest_null;
 XferElement *xfer_dest_null(
     guint32 prng_seed);
+
+%newobject xfer_dest_buffer;
+XferElement *xfer_dest_buffer(
+    gsize max_size);
+
+%cstring_output_allocate_size(gpointer *buf, gsize *size, );
+void xfer_dest_buffer_get(
+    XferElement *elt,
+    gpointer *buf,
+    gsize *size);
 
 %newobject xfer_dest_fd;
 XferElement *xfer_dest_fd(
@@ -356,6 +380,8 @@ xmsgsource_perl_callback(
     SV *msg_sv = NULL;
     SV *xfer_sv = NULL;
 
+    /* keep the source around long enough for the call to finish */
+    amglue_source_ref(src);
     g_assert(src->callback_sv != NULL);
 
     ENTER;
@@ -382,9 +408,12 @@ xmsgsource_perl_callback(
     FREETMPS;
     LEAVE;
 
+    /* we no longer need the src */
+    amglue_source_unref(src);
+    src = NULL;
+
     /* these may be gone, so NULL them out */
     src_sv = NULL;
-    src = NULL;
     msg_sv = NULL;
     xfer_sv = NULL;
 
@@ -430,11 +459,15 @@ package PKG;
 }
 %enddef
 
-%define XFER_ELEMENT_SUBCLASS()
+%define XFER_ELEMENT_SUBCLASS_OF(PARENT)
 %perlcode {
 use vars qw(@ISA);
-@ISA = qw( Amanda::Xfer::Element );
+@ISA = qw( PARENT );
 }
+%enddef
+
+%define XFER_ELEMENT_SUBCLASS()
+XFER_ELEMENT_SUBCLASS_OF(Amanda::Xfer::Element)
 %enddef
 
 %define DECLARE_CONSTRUCTOR(C_CONSTRUCTOR)
@@ -497,6 +530,13 @@ DECLARE_CONSTRUCTOR(Amanda::Xfer::xfer_source_random)
 
 /* ---- */
 
+PACKAGE(Amanda::Xfer::Source::DirectTCPListen)
+XFER_ELEMENT_SUBCLASS()
+DECLARE_CONSTRUCTOR(Amanda::Xfer::xfer_source_directtcp_listen)
+DECLARE_METHOD(get_addrs, Amanda::Xfer::xfer_source_directtcp_listen_get_addrs)
+
+/* ---- */
+
 PACKAGE(Amanda::Xfer::Source::Pattern)
 XFER_ELEMENT_SUBCLASS()
 DECLARE_CONSTRUCTOR(Amanda::Xfer::xfer_source_pattern)
@@ -524,6 +564,13 @@ DECLARE_CONSTRUCTOR(Amanda::Xfer::xfer_dest_fd)
 PACKAGE(Amanda::Xfer::Dest::Null)
 XFER_ELEMENT_SUBCLASS()
 DECLARE_CONSTRUCTOR(Amanda::Xfer::xfer_dest_null)
+
+/* ---- */
+
+PACKAGE(Amanda::Xfer::Dest::Buffer)
+XFER_ELEMENT_SUBCLASS()
+DECLARE_CONSTRUCTOR(Amanda::Xfer::xfer_dest_buffer)
+DECLARE_METHOD(get, Amanda::Xfer::xfer_dest_buffer_get)
 
 /* ---- */
 

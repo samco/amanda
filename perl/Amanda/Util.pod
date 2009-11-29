@@ -14,7 +14,7 @@
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  *
- * Contact information: Zmanda Inc., 465 N Mathlida Ave, Suite 300
+ * Contact information: Zmanda Inc., 465 S. Mathilda Ave., Suite 300
  * Sunnyvale, CA 94085, USA, or: http://www.zmanda.com
  */
 
@@ -213,6 +213,18 @@ string is split into C<( "" )>.
 
 All of these quoting-related functions are available under the export
 tag C<:quoting>.
+
+=item hexencode($str)
+
+Encode a string using URI-style hexadecimal encoding.
+Non-alphanumeric characters will be replaced with "%xx"
+where "xx" is the two-digit hexadecimal representation of the character.
+
+=item hexdecode($str)
+
+Decode a string using URI-style hexadecimal encoding.
+
+Both C<hexencode> and C<hexdecode> are available under the export tag C<:encoding>
 
 =item expand_braced_alternates($str)
 =item collapse_braced_alternates(\@list)

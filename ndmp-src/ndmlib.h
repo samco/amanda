@@ -38,21 +38,6 @@
 #ifndef _NDMLIB_H_
 #define _NDMLIB_H_
 
-/*
- * Force large file source even if configure guesses wrong.
- */
-#ifndef _LARGE_FILE_SOURCE
-#define _LARGE_FILES 1
-#endif
-
-#ifndef _LARGEFILE64_SOURCE
-#define _LARGEFILE64_SOURCE 1
-#endif
-
-#ifndef  _FILE_OFFSET_BITS
-#define	_FILE_OFFSET_BITS 64
-#endif
-
 #include "ndmos.h"
 
 #include "ndmprotocol.h"
@@ -725,9 +710,9 @@ extern int	ndmmd5_ok_digest (char challenge[NDMP_MD5_CHALLENGE_LENGTH],
 extern int ndmbstf_first (FILE *fp, char *key, char *buf, unsigned max_buf);
 extern int ndmbstf_next (FILE *fp, char *key, char *buf, unsigned max_buf);
 extern int ndmbstf_first_with_bounds (FILE *fp, char *key,
-	    char *buf, unsigned max_buf, long lower_bound, long upper_bound);
+	    char *buf, unsigned max_buf, off_t lower_bound, off_t upper_bound);
 extern int ndmbstf_getline (FILE *fp, char *buf, unsigned max_buf);
-extern int ndmbstf_seek_and_align (FILE *fp, long *off);
+extern int ndmbstf_seek_and_align (FILE *fp, off_t *off);
 extern int ndmbstf_match (char *key, char *buf);
 extern int ndmbstf_compare (char *key, char *buf);
 

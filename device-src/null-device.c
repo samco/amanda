@@ -14,7 +14,7 @@
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  *
- * Contact information: Zmanda Inc., 465 N Mathlida Ave, Suite 300
+ * Contact information: Zmanda Inc., 465 S. Mathilda Ave., Suite 300
  * Sunnyvale, CA 94085, USA, or: http://www.zmanda.com
  */
 
@@ -259,6 +259,7 @@ null_device_start_file(Device * d_self,
 		    dumpfile_t * jobInfo G_GNUC_UNUSED)
 {
     d_self->in_file = TRUE;
+    d_self->is_eom = FALSE;
     d_self->block = 0;
     if (d_self->file <= 0)
         d_self->file = 1;

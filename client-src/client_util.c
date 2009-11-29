@@ -683,6 +683,19 @@ application_property_add_to_argv(
 	    g_ptr_array_add(argv_ptr, stralloc("--exclude-optional"));
 	    g_ptr_array_add(argv_ptr, stralloc("yes"));
 	}
+
+	if (dle->data_path == DATA_PATH_DIRECTTCP &&
+	    (bsu->data_path_set & DATA_PATH_DIRECTTCP) == 0) {
+	    GSList *directtcp;
+
+	    g_ptr_array_add(argv_ptr, stralloc("--data-path"));
+	    g_ptr_array_add(argv_ptr, stralloc("directtcp"));
+	    for (directtcp = dle->directtcp_list; directtcp != NULL;
+						  directtcp = directtcp->next) {
+		g_ptr_array_add(argv_ptr, stralloc("--direct-tcp"));
+		g_ptr_array_add(argv_ptr, stralloc(directtcp->data));
+	    }
+	}
     }
 
     g_hash_table_foreach(dle->application_property,
@@ -808,12 +821,21 @@ backup_support_option(
 	} else if (strncmp(line,"RECOVER-MODE ", 13) == 0) {
 	    if (strcasecmp(line+13, "SMB") == 0)
 		bsu->smb_recover_mode = 1;
+	} else if (strncmp(line,"DATA-PATH ", 10) == 0) {
+	    if (strcasecmp(line+10, "AMANDA") == 0)
+		bsu->data_path_set |= DATA_PATH_AMANDA;
+	    else if (strcasecmp(line+10, "DIRECTTCP") == 0)
+		bsu->data_path_set |= DATA_PATH_DIRECTTCP;
 	} else {
 	    dbprintf(_("Invalid support line: %s\n"), line);
 	}
 	amfree(line);
     }
-    aclose(supportout);
+    fclose(streamout);
+
+    if (bsu->data_path_set == 0)
+	bsu->data_path_set = DATA_PATH_AMANDA;
+
     streamerr = fdopen(supporterr, "r");
     if (!streamerr) {
 	error(_("Error opening pipe to child: %s"), strerror(errno));
@@ -826,7 +848,7 @@ backup_support_option(
 	}
 	amfree(bsu);
     }
-    aclose(supporterr);
+    fclose(streamerr);
 
     if (waitpid(supportpid, &status, 0) < 0) {
 	err = vstrallocf(_("waitpid failed: %s"), strerror(errno));
@@ -842,6 +864,7 @@ backup_support_option(
 	amfree(bsu);
     }
     g_ptr_array_free_full(argv_ptr);
+    amfree(cmd);
     return bsu;
 }
 
@@ -1626,5 +1649,41 @@ build_re_table(
     re_table->typ = DMP_STRANGE;
 
     return new_re_table;
+}
+
+typedef struct {
+    proplist_t result;
+} merge_property_t;
+
+static void
+merge_property(
+    gpointer key_p,
+    gpointer value_p,
+    gpointer user_data_p)
+{
+    char *property_s = key_p;
+    GSList *value_s = value_p;
+    merge_property_t *merge_p = user_data_p;
+    GSList *value = g_hash_table_lookup(merge_p->result, property_s);
+
+    if (value) { /* remove old value */
+	g_hash_table_remove(merge_p->result, key_p);
+    }
+    g_hash_table_insert(merge_p->result, key_p, value_s);
+}
+
+void
+merge_properties(
+    proplist_t proplist1,
+    proplist_t proplist2)
+{
+    merge_property_t merge_p = {proplist1};
+
+    if (proplist2 == NULL) {
+	return;
+    }
+    g_hash_table_foreach(proplist2,
+                         &merge_property,
+                         &merge_p);
 }
 

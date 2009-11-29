@@ -13,7 +13,7 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
 #
-# Contact information: Zmanda Inc, 465 S Mathlida Ave, Suite 300
+# Contact information: Zmanda Inc, 465 S. Mathilda Ave., Suite 300
 # Sunnyvale, CA 94086, USA, or: http://www.zmanda.com
 
 use Test::More tests => 15;
@@ -37,19 +37,15 @@ use base "Amanda::IPC::Binary";
 use Amanda::IPC::Binary;
 
 # cmd_id's
-use constant {
-    SIMPLE => 1,
-    FOO => 2,
-    BAR => 3,
-};
+use constant SIMPLE => 1;
+use constant FOO => 2;
+use constant BAR => 3;
 
 # arg_id's
-use constant {
-    NAME => 1,
-    NICKNAME => 2,
-    MANDATORY => 3,
-    OPTIONAL => 4,
-};
+use constant NAME => 1;
+use constant NICKNAME => 2;
+use constant MANDATORY => 3;
+use constant OPTIONAL => 4;
 
 magic(0x1234);
 

@@ -13,7 +13,7 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
 #
-# Contact information: Zmanda Inc, 465 S Mathlida Ave, Suite 300
+# Contact information: Zmanda Inc, 465 S. Mathilda Ave., Suite 300
 # Sunnyvale, CA 94086, USA, or: http://www.zmanda.com
 
 use Test::More tests => 173;
@@ -329,7 +329,8 @@ SKIP: { # dumptypes
 	  'optional' => 0 },
 	"dumptype exclude list");
     is_deeply(dumptype_getconf($dtyp, $DUMPTYPE_ESTIMATELIST),
-	      [ $ES_SERVER, $ES_CALCSIZE, $ES_CLIENT ]);
+	      [ $ES_SERVER, $ES_CALCSIZE, $ES_CLIENT ],
+	"dumptype estimate list");
     is_deeply(dumptype_getconf($dtyp, $DUMPTYPE_PROPERTY),
 	      { "prop" => { priority => 0, append => 0, values => ["erty"]},
 		"drop" => { priority => 0, append => 0,

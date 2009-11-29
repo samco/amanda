@@ -60,6 +60,7 @@ typedef struct backup_support_option_s {
     int client_estimate;
     int multi_estimate;
     int smb_recover_mode;
+    data_path_t data_path_set;  /* bitfield of all allowed data-path */
 } backup_support_option_t;
 
 typedef struct client_script_result_s {
@@ -160,6 +161,10 @@ void add_type_table(dmpline_t typ,
                     GSList *strange_message);
 void add_list_table(dmpline_t typ, amregex_t **re_table,
                     GSList *message);
+
+/* Merge properties from proplist2 to proplist1)
+ */
+void merge_properties(proplist_t proplist1, proplist_t proplist2);
 
 #endif
 

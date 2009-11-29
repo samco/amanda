@@ -14,7 +14,7 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
 #
-# Contact information: Zmanda Inc., 465 S Mathlida Ave, Suite 300
+# Contact information: Zmanda Inc., 465 S. Mathilda Ave., Suite 300
 # Sunnyvale, CA 94086, USA, or: http://www.zmanda.com
 
 use lib '@amperldir@';
@@ -129,6 +129,7 @@ sub main {
     my $hdr;
     my $filenum = $opt_filenum;
     $filenum = 1 if (!$filenum);
+    $filenum = 0 + "$filenum"; # convert to integer
 
     $subs{'start'} = make_cb(start => sub {
 	# first, return to the original working directory we were started in

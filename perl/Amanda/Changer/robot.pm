@@ -13,7 +13,7 @@
 # along with this library; if not, write to the Free Software Foundation,
 # Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA.
 #
-# Contact information: Zmanda Inc., 465 S Mathlida Ave, Suite 300
+# Contact information: Zmanda Inc., 465 S. Mathilda Ave., Suite 300
 # Sunnyvale, CA 94086, USA, or: http://www.zmanda.com
 
 package Amanda::Changer::robot;
@@ -111,19 +111,18 @@ See the amanda-changers(7) manpage for usage information.
 
 # constants for the states that slots may be in; note that these states still
 # apply even if the tape is actually loaded in a drive
-use constant {
-    # slot is known to contain no volume
-    SLOT_EMPTY => 0,
 
-    # slot contains a volume, but who knows what
-    SLOT_UNKNOWN => 1,
+# slot is known to contain no volume
+use constant SLOT_EMPTY => 0;
 
-    # slot contains an unlabled volume
-    SLOT_UNLABELED => 2,
+# slot contains a volume, but who knows what
+use constant SLOT_UNKNOWN => 1;
 
-    # slot contains a volume with a known label
-    SLOT_LABELED => 3,
-};
+# slot contains an unlabled volume
+use constant SLOT_UNLABELED => 2;
+
+# slot contains a volume with a known label
+use constant SLOT_LABELED => 3;
 
 sub new {
     my $class = shift;
@@ -717,7 +716,8 @@ sub load_unlocked {
 	}
 
 	my $slot_state = $label? SLOT_LABELED : SLOT_UNLABELED;
-        my $res = Amanda::Changer::robot::Reservation->new($self, $slot, $drive, $device);
+        my $res = Amanda::Changer::robot::Reservation->new($self, $slot, $drive,
+                                $device, $state->{'slots'}->{$slot}->{'barcode'});
 
 	# mark this as reserved
 	$state->{'drives'}->{$drive}->{'res_info'} = $self->_res_info_new();
@@ -1627,7 +1627,7 @@ use Amanda::Debug qw( debug warning );
 
 sub new {
     my $class = shift;
-    my ($chg, $slot, $drive, $device) = @_;
+    my ($chg, $slot, $drive, $device, $barcode) = @_;
     my $self = Amanda::Changer::Reservation::new($class);
 
     $self->{'chg'} = $chg;
@@ -1635,6 +1635,7 @@ sub new {
     $self->{'drive'} = $drive;
     $self->{'device'} = $device;
     $self->{'this_slot'} = $slot;
+    $self->{'barcode'} = $barcode;
 
     return $self;
 }

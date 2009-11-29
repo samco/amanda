@@ -13,22 +13,24 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
 #
-# Contact information: Zmanda Inc, 465 S Mathlida Ave, Suite 300
+# Contact information: Zmanda Inc, 465 S. Mathilda Ave., Suite 300
 # Sunnyvale, CA 94086, USA, or: http://www.zmanda.com
 
-use Test::More tests => 130;
+use Test::More tests => 134;
 
 use lib '@amperldir@';
 use Installcheck::Run;
 use IO::Handle;
 use IPC::Open3;
+use Data::Dumper;
 use IO::Socket::INET;
 use POSIX ":sys_wait_h";
 
 use Amanda::Paths;
-use Amanda::Header;
+use Amanda::Header qw( :constants );
 use Amanda::Debug;
 use Amanda::Paths;
+use Amanda::Device qw( :constants );
 
 # ABOUT THESE TESTS:
 #
@@ -192,7 +194,8 @@ sub write_dumpfile_to {
     $hdr->{'type'} = $Amanda::Header::F_DUMPFILE;
     $hdr->{'datestamp'} = $datestamp;
     $hdr->{'dumplevel'} = 0;
-    $hdr->{'compressed'} = 1;
+    $hdr->{'compressed'} = 0;
+    $hdr->{'comp_suffix'} = ".foo";
     $hdr->{'name'} = $hostname;
     $hdr->{'disk'} = $disk;
     $hdr->{'program'} = "INSTALLCHECK";
@@ -291,6 +294,58 @@ check_logs([
     qr(^INFO taper tape TESTCONF01 kb 2048 fm 4 \[OK\]$),
 ], "single-part and multi-part dump logged correctly");
 
+# check out the headers on those files, just to be sure
+{
+    my $dev = Amanda::Device->new("file:" . Installcheck::Run::vtape_dir());
+    die("bad device: " . $dev->error_or_status()) unless $dev->status == $DEVICE_STATUS_SUCCESS;
+
+    $dev->start($ACCESS_READ, undef, undef)
+	or die("can't start device: " . $dev->error_or_status());
+
+    sub is_hdr {
+	my ($hdr, $expected, $msg) = @_;
+	my $got = {};
+	for (keys %$expected) { $got->{$_} = "".$hdr->{$_}; }
+	if (!is_deeply($got, $expected, $msg)) {
+	    diag("got: " . Dumper($got));
+	}
+    }
+
+    is_hdr($dev->seek_file(1), {
+	type => $F_DUMPFILE,
+	datestamp => $datestamp,
+	name => 'localhost',
+	disk => '/home',
+    }, "header on file 1 is correct");
+
+    is_hdr($dev->seek_file(2), {
+	type => $F_SPLIT_DUMPFILE,
+	datestamp => $datestamp,
+	name => 'localhost',
+	disk => '/usr',
+	partnum => 1,
+	totalparts => 3,
+    }, "header on file 2 is correct");
+
+    is_hdr($dev->seek_file(3), {
+	type => $F_SPLIT_DUMPFILE,
+	datestamp => $datestamp,
+	name => 'localhost',
+	disk => '/usr',
+	partnum => 2,
+	totalparts => 3,
+    }, "header on file 3 is correct");
+
+    is_hdr($dev->seek_file(4), {
+	type => $F_SPLIT_DUMPFILE,
+	datestamp => $datestamp,
+	name => 'localhost',
+	disk => '/usr',
+	partnum => 3,
+	totalparts => 3,
+    }, "header on file 4 is correct");
+}
+
 ##
 # A PORT-WRITE with no disk buffer
 
@@ -299,7 +354,7 @@ $datestamp = "19780615010203";
 run_taper(4096, "multipart PORT-WRITE");
 like(taper_reply, qr/^TAPER-OK$/,
 	"got TAPER-OK") or die;
-taper_cmd("PORT-WRITE $handle localhost /var 0 $datestamp 524288 NULL 393216");
+taper_cmd("PORT-WRITE $handle localhost /var 0 $datestamp 524288 NULL 393216 AMANDA");
 like(taper_reply, qr/^PORT (\d+)$/,
 	"got PORT");
 ($port) = ($last_taper_reply =~ /^PORT (\d+)/);
@@ -374,7 +429,7 @@ $datestamp = "19750711095836";
 run_taper(1024, "PORT-WRITE retry on EOT (mem cache)");
 like(taper_reply, qr/^TAPER-OK$/,
 	"got TAPER-OK") or die;
-taper_cmd("PORT-WRITE $handle localhost /usr/local 0 $datestamp 786432 NULL 786432");
+taper_cmd("PORT-WRITE $handle localhost /usr/local 0 $datestamp 786432 NULL 786432 AMANDA");
 like(taper_reply, qr/^PORT (\d+)$/,
 	"got PORT");
 ($port) = ($last_taper_reply =~ /^PORT (\d+)/);
@@ -472,7 +527,7 @@ $datestamp = "20090427212500";
 run_taper(1024, "PORT-WRITE retry on EOT (disk cache)");
 like(taper_reply, qr/^TAPER-OK$/,
 	"got TAPER-OK") or die;
-taper_cmd("PORT-WRITE $handle localhost /usr/local 0 $datestamp 786432 \"$Installcheck::TMP\" 786432");
+taper_cmd("PORT-WRITE $handle localhost /usr/local 0 $datestamp 786432 \"$Installcheck::TMP\" 786432 AMANDA");
 like(taper_reply, qr/^PORT (\d+)$/,
 	"got PORT");
 ($port) = ($last_taper_reply =~ /^PORT (\d+)/);
@@ -524,7 +579,7 @@ $datestamp = "20090424173000";
 run_taper(1024, "PORT-WRITE failure on EOT (no cache)");
 like(taper_reply, qr/^TAPER-OK$/,
 	"got TAPER-OK") or die;
-taper_cmd("PORT-WRITE $handle localhost /var/log 0 $datestamp 0 NULL 0");
+taper_cmd("PORT-WRITE $handle localhost /var/log 0 $datestamp 0 NULL 0 AMANDA");
 like(taper_reply, qr/^PORT (\d+)$/,
 	"got PORT");
 ($port) = ($last_taper_reply =~ /^PORT (\d+)/);
@@ -592,7 +647,7 @@ $datestamp = "20200202222222";
 run_taper(4096, "multipart PORT-WRITE");
 like(taper_reply, qr/^TAPER-OK$/,
 	"got TAPER-OK") or die;
-taper_cmd("PORT-WRITE $handle localhost /sbin 0 $datestamp 10 NULL 655360");
+taper_cmd("PORT-WRITE $handle localhost /sbin 0 $datestamp 10 NULL 655360 AMANDA");
 like(taper_reply, qr/^PORT (\d+)$/,
 	"got PORT");
 ($port) = ($last_taper_reply =~ /^PORT (\d+)/);

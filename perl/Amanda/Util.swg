@@ -14,7 +14,7 @@
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
  *
- * Contact information: Zmanda Inc., 465 N Mathlida Ave, Suite 300
+ * Contact information: Zmanda Inc., 465 S. Mathilda Ave., Suite 300
  * Sunnyvale, CA 94085, USA, or: http://www.zmanda.com
  */
 
@@ -25,6 +25,7 @@
 %include "Amanda/Util.pod"
 
 %{
+#include "amglue.h"
 #include "debug.h"
 #include "full-read.h"
 #include "full-write.h"
@@ -263,6 +264,24 @@ sub skip_quoted_string {
 	}
     }
 }
+
+%rename(hexencode) hexencode_string;
+char *hexencode_string(char *);
+%rename(hexdecode) perl_hexdecode_string;
+char *perl_hexdecode_string(char *);
+%{
+char *perl_hexdecode_string(const char *str) {
+    GError *err = NULL;
+    char *tmp;
+    tmp = hexdecode_string(str, &err);
+    if (err) {
+        g_free(tmp);
+        croak_gerror("Amanda util: hexdecode", &err);
+    }
+    return tmp;
+}
+%}
+amglue_export_tag(encoding, hexencode hexdecode);
 
 char *sanitise_filename(char *inp);
 char *quote_string(char *);

@@ -13,7 +13,7 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
 #
-# Contact information: Zmanda Inc, 465 S Mathlida Ave, Suite 300
+# Contact information: Zmanda Inc, 465 S. Mathilda Ave., Suite 300
 # Sunnyvale, CA 94086, USA, or: http://www.zmanda.com
 
 use Test::More tests => 16;
@@ -121,11 +121,11 @@ make_holding(
     [ $holding3, '20070306123456', 'olfactory', '/stinky', 1 ],
 );
 
-is_deeply([ sort(Amanda::Holding::disks()) ],
+is_deeply([ sort(+Amanda::Holding::disks()) ],
     [ sort($holding1, $holding2) ],
     "all active holding disks, but not inactive (defined but not used) disks");
 
-is_deeply([ sort(Amanda::Holding::files()) ],
+is_deeply([ sort(+Amanda::Holding::files()) ],
     [ sort(
 	"$holding1/20070303000000/videoserver._video_a",
 	"$holding1/20070306123456/videoserver._video_a",
@@ -135,7 +135,7 @@ is_deeply([ sort(Amanda::Holding::files()) ],
     ) ],
     "all files");
 
-is_deeply([ sort(Amanda::Holding::file_chunks("$holding2/20070306123456/audio._var")) ],
+is_deeply([ sort(+Amanda::Holding::file_chunks("$holding2/20070306123456/audio._var")) ],
     [ sort(
 	"$holding2/20070306123456/audio._var",
 	"$holding2/20070306123456/audio._var.1",
@@ -161,7 +161,7 @@ is_deeply([ Amanda::Holding::get_all_datestamps() ],
 	  [ sort("20070303000000", "20070306123456") ],
 	  "get_all_datestamps");
 
-is_deeply([ sort(Amanda::Holding::get_files_for_flush("023985")) ],
+is_deeply([ sort(+Amanda::Holding::get_files_for_flush("023985")) ],
 	  [ sort() ],
 	  "get_files_for_flush with no matching datestamps returns no files");
 is_deeply([ Amanda::Holding::get_files_for_flush("20070306123456") ],
