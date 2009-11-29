@@ -294,8 +294,8 @@ mounted and read as a VFS device.</para>
 contains no filesystem will usually result in an error. The boolean
 DVDRW_UNLABELLED_WHEN_UNMOUNTABLE property specifies whether media that cannot
 be mounted should be treated as an empty, unlabelled volume when attempting to
-read the volume label. Setting this property to "false" will result in such
-media being unlabellable.</para>
+read the volume label. It is necessary to set this property to "true" when
+labelling such media.</para>
 
 <para>The properties DVDRW_GROWISOFS_COMMAND, DVDRW_MOUNT_COMMAND and
 DVDRW_UMOUNT_COMMAND specify alternative commands for writing, mounting and
@@ -587,6 +587,18 @@ operations can be emulated with the MTREW and read data operations.</para>
 </listitem></varlistentry>
  <varlistentry><term>DVDRW_MOUNT_POINT</term><listitem>
  (read-write) This property specifies the filesystem mount point for the optical media. Non-root users must be able to mount optical media by invoking "mount" and specifying this mount point.
+</listitem></varlistentry>
+ <varlistentry><term>DVDRW_UNLABELLED_WHEN_UNMOUNTABLE</term><listitem>
+ (read-write) Treat unmountable media as empty, unlabelled media. This is necessary when attempting to label freshly formatted media.
+</listitem></varlistentry>
+ <varlistentry><term>DVDRW_GROWISOFS_COMMAND</term><listitem>
+ (read-write) The command to invoke to burn the DVD.
+</listitem></varlistentry>
+ <varlistentry><term>DVDRW_MOUNT_COMMAND</term><listitem>
+ (read-write) The command to invoke to mount the DVD.
+</listitem></varlistentry>
+ <varlistentry><term>DVDRW_UMOUNT_COMMAND</term><listitem>
+ (read-write) The command to invoke to unmount the DVD.
 </listitem></varlistentry>
 </variablelist>
 

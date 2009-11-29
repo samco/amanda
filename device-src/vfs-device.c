@@ -85,7 +85,7 @@ static IoResult vfs_device_robust_read(VfsDevice * self, char *buf,
 /* Various helper functions. */
 static void release_file(VfsDevice * self);
 static gboolean check_is_dir(VfsDevice * self, const char * name);
-static char * file_number_to_file_name(VfsDevice * self, const char * dir_name, guint file);
+static char * file_number_to_file_name(VfsDevice * self, guint file);
 static gboolean file_number_to_file_name_functor(const char * filename,
                                                  gpointer datap);
 static gboolean vfs_device_set_max_volume_usage_fn(Device *p_self,
@@ -102,14 +102,14 @@ static gboolean delete_vfs_files_functor(const char * filename,
                                          gpointer self);
 static gboolean check_dir_empty_functor(const char * filename,
                                         gpointer self);
-static gboolean clear_and_prepare_label(VfsDevice * self, const char * dir_name, char * label,
+static gboolean clear_and_prepare_label(VfsDevice * self, char * label,
                                         char * timestamp);
-static int search_vfs_directory(VfsDevice *self, const char * dir_name, const char * regex,
+static int search_vfs_directory(VfsDevice *self, const char * regex,
 			SearchDirectoryFunctor functor, gpointer user_data);
-static gint get_last_file_number(VfsDevice * self, const char *dir_name);
+static gint get_last_file_number(VfsDevice * self);
 static gboolean get_last_file_number_functor(const char * filename,
                                              gpointer datap);
-static char * make_new_file_name(VfsDevice * self, const char * dir_name, const dumpfile_t * ji);
+static char * make_new_file_name(VfsDevice * self, const dumpfile_t * ji);
 static gboolean try_unlink(const char * file);
 
 /* pointer to the classes of our parents */
@@ -266,18 +266,11 @@ vfs_device_get_free_space_fn(struct Device *dself,
     PropertySurety *surety, PropertySource *source)
 {
     VfsDevice *self = VFS_DEVICE(dself);
-
-    return vfs_device_get_free_space_dir(self, self->dir_name, val, surety, source);
-}
-
-gboolean
-vfs_device_get_free_space_dir(VfsDevice *self, const char *dir_name, GValue *val, PropertySurety *surety, PropertySource *source)
-{
     QualifiedSize qsize;
     struct fs_usage fsusage;
     guint64 bytes_avail;
 
-    if (get_fs_usage(dir_name, NULL, &fsusage) == 0) {
+    if (get_fs_usage(self->dir_name, NULL, &fsusage) == 0) {
 	if (fsusage.fsu_bavail_top_bit_set)
 	    bytes_avail = 0;
 	else
@@ -290,7 +283,7 @@ vfs_device_get_free_space_dir(VfsDevice *self, const char *dir_name, GValue *val
 	if (surety)
 	    *surety = PROPERTY_SURETY_GOOD;
     } else {
-	g_warning(_("get_fs_usage('%s') failed: %s"), dir_name, strerror(errno));
+	g_warning(_("get_fs_usage('%s') failed: %s"), self->dir_name, strerror(errno));
 	qsize.accuracy = SIZE_ACCURACY_UNKNOWN;
 	qsize.bytes = 0;
 	if (surety)
@@ -366,7 +359,6 @@ static gboolean check_is_dir(VfsDevice * self, const char * name) {
 
 typedef struct {
     VfsDevice * self;
-    const char * dir_name;
     int count;
     char * result;
 } fnfn_data;
@@ -378,7 +370,7 @@ static gboolean file_number_to_file_name_functor(const char * filename,
     struct stat file_status;
     fnfn_data *data = (fnfn_data*)datap;
 
-    result_tmp = vstralloc(data->dir_name, "/", filename, NULL);
+    result_tmp = vstralloc(data->self->dir_name, "/", filename, NULL);
 
     /* Just to be thorough, let's check that it's a real
        file. */
@@ -401,18 +393,17 @@ static gboolean file_number_to_file_name_functor(const char * filename,
  * for a filesystem file matching the regex /^0*$device_file\./; if
  * there is more than one such file we make a warning and take an
  * arbitrary one. */
-static char * file_number_to_file_name(VfsDevice * self, const char * dir_name, guint device_file) {
+static char * file_number_to_file_name(VfsDevice * self, guint device_file) {
     char * regex;
     fnfn_data data;
 
     data.self = self;
-    data.dir_name = dir_name;
     data.count = 0;
     data.result = NULL;
 
     regex = g_strdup_printf("^0*%u\\.", device_file);
 
-    search_vfs_directory(self, dir_name, regex,
+    search_vfs_directory(self, regex,
                          file_number_to_file_name_functor, &data);
 
     amfree(regex);
@@ -461,19 +452,14 @@ static void promote_volume_lock(VfsDevice * self G_GNUC_UNUSED) {
 static void demote_volume_lock(VfsDevice * self G_GNUC_UNUSED) {
 }
 
-typedef struct {
-    VfsDevice * self;
-    const char * dir_name;
-} uvs_data;
-
 /* A SearchDirectoryFunctor */
 static gboolean update_volume_size_functor(const char * filename,
                                            gpointer user_data) {
     char * full_filename;
     struct stat stat_buf;
-    uvs_data * data = (uvs_data *) user_data;
+    VfsDevice * self = VFS_DEVICE(user_data);
 
-    full_filename = vstralloc(data->dir_name, "/", filename, NULL);
+    full_filename = vstralloc(self->dir_name, "/", filename, NULL);
 
     if (stat(full_filename, &stat_buf) < 0) {
         /* Log it and keep going. */
@@ -483,20 +469,16 @@ static gboolean update_volume_size_functor(const char * filename,
     }
 
     amfree(full_filename);
-    data->self->volume_bytes += stat_buf.st_size;
+    self->volume_bytes += stat_buf.st_size;
 
     return TRUE;
 }
 
-static void update_volume_size(VfsDevice * self, const char *dir_name) {
-    uvs_data data;
-
-    data.self = self;
-    data.dir_name = dir_name;
+static void update_volume_size(VfsDevice * self) {
 
     self->volume_bytes = 0;
-    search_vfs_directory(self, dir_name, "^[0-9]+\\.",
-                         update_volume_size_functor, &data);
+    search_vfs_directory(self, "^[0-9]+\\.",
+                         update_volume_size_functor, self);
 
 }
 
@@ -542,11 +524,11 @@ static gboolean delete_vfs_files_functor(const char * filename,
 
 /* delete_vfs_files deletes all VfsDevice files in the directory except the
    volume lockfile. */
-void delete_vfs_files(VfsDevice * self, const char * dir_name) {
+void delete_vfs_files(VfsDevice * self) {
     g_assert(self != NULL);
 
     /* This function assumes that the volume is locked! */
-    search_vfs_directory(self, dir_name, VFS_DEVICE_FILE_REGEX,
+    search_vfs_directory(self, VFS_DEVICE_FILE_REGEX,
                          delete_vfs_files_functor, self);
 }
 
@@ -595,7 +577,7 @@ static gboolean write_amanda_header(VfsDevice * self,
 /* clear_and_label will erase the contents of the directory, and write
  * this label in its place. This function assumes we already have a volume
  * label write lock in place (e.g., promote_lock() has been called.) */
-static gboolean clear_and_prepare_label(VfsDevice * self, const char *dir_name, char * label,
+static gboolean clear_and_prepare_label(VfsDevice * self, char * label,
                                         char * timestamp) {
     dumpfile_t * label_header;
     Device *d_self = DEVICE(self);
@@ -603,10 +585,10 @@ static gboolean clear_and_prepare_label(VfsDevice * self, const char *dir_name, 
     release_file(self);
 
     /* Delete any extant data, except our volume lock. */
-    delete_vfs_files(self, dir_name);
+    delete_vfs_files(self);
 
     /* Print warnings about any remaining files. */
-    search_vfs_directory(self, dir_name, VFS_DEVICE_FILE_REGEX,
+    search_vfs_directory(self, VFS_DEVICE_FILE_REGEX,
                          check_dir_empty_functor, self);
 
     self->file_name = g_strdup_printf("%s/00000.%s", self->dir_name, label);
@@ -636,7 +618,6 @@ static gboolean clear_and_prepare_label(VfsDevice * self, const char *dir_name, 
 static int
 search_vfs_directory(
     VfsDevice *self,
-    const char * dir_name,
     const char * regex,
     SearchDirectoryFunctor functor,
     gpointer user_data)
@@ -645,11 +626,11 @@ search_vfs_directory(
     DIR *dir_handle;
     int result = -1;
 
-    dir_handle = opendir(dir_name);
+    dir_handle = opendir(self->dir_name);
     if (dir_handle == NULL) {
 	device_set_error(dself,
 		vstrallocf(_("Couldn't open device %s (directory %s) for reading: %s"),
-			dself->device_name, dir_name, strerror(errno)),
+			dself->device_name, self->dir_name, strerror(errno)),
 		DEVICE_STATUS_DEVICE_ERROR);
         goto error;
     }
@@ -666,17 +647,11 @@ error:
 
 static DeviceStatusFlags vfs_device_read_label(Device * dself) {
     VfsDevice * self = VFS_DEVICE(dself);
-
-    return vfs_device_read_label_dir(self, self->dir_name);
-}
-
-DeviceStatusFlags vfs_device_read_label_dir(VfsDevice * self, const char * dir_name) {
-    Device * dself = DEVICE(self);
     dumpfile_t * amanda_header;
 
     g_assert(self != NULL);
 
-    if (!check_is_dir(self, dir_name)) {
+    if (!check_is_dir(self, self->dir_name)) {
 	/* error message set by check_is_dir */
         return dself->status;
     }
@@ -687,7 +662,7 @@ DeviceStatusFlags vfs_device_read_label_dir(VfsDevice * self, const char * dir_n
 
     if (device_in_error(dself)) return dself->status;
 
-    amanda_header = dself->volume_header = vfs_device_seek_file_dir(self, dir_name, 0);
+    amanda_header = dself->volume_header = vfs_device_seek_file(dself, 0);
     release_file(self);
     if (amanda_header == NULL) {
         /* This means an error occured getting locks or opening the header
@@ -718,7 +693,7 @@ DeviceStatusFlags vfs_device_read_label_dir(VfsDevice * self, const char * dir_n
 
     device_set_error(dself, NULL, DEVICE_STATUS_SUCCESS);
 
-    update_volume_size(self, dir_name);
+    update_volume_size(self);
 
     return dself->status;
 }
@@ -800,16 +775,7 @@ vfs_device_start(Device * dself,
                                  char * timestamp) {
     VfsDevice * self = VFS_DEVICE(dself);
 
-    return vfs_device_start_dir(self, self->dir_name, mode, label, timestamp);
-}
-
-gboolean
-vfs_device_start_dir(VfsDevice * self, const char * dir_name,
-                                 DeviceAccessMode mode, char * label,
-                                 char * timestamp) {
-    Device *dself = DEVICE(self);
-
-    if (!check_is_dir(self, dir_name)) {
+    if (!check_is_dir(self, self->dir_name)) {
 	/* error message set by check_is_dir */
         return FALSE;
     }
@@ -818,7 +784,7 @@ vfs_device_start_dir(VfsDevice * self, const char * dir_name,
 
     if (mode == ACCESS_WRITE) {
         promote_volume_lock(self);
-        if (!clear_and_prepare_label(self, dir_name, label, timestamp)) {
+        if (!clear_and_prepare_label(self, label, timestamp)) {
 	    /* clear_and_prepare_label sets error status if necessary */
             demote_volume_lock(self);
             return FALSE;
@@ -883,14 +849,14 @@ static gboolean get_last_file_number_functor(const char * filename,
 }
 
 static gint
-get_last_file_number(VfsDevice * self, const char *dir_name) {
+get_last_file_number(VfsDevice * self) {
     glfn_data data;
     int count;
     Device *d_self = DEVICE(self);
     data.self = self;
     data.rval = -1;
 
-    count = search_vfs_directory(self, dir_name, "^[0-9]+\\.",
+    count = search_vfs_directory(self, "^[0-9]+\\.",
                                  get_last_file_number_functor, &data);
 
     if (count <= 0) {
@@ -934,7 +900,7 @@ static gboolean get_next_file_number_functor(const char * filename,
 /* Returns the file number equal to or greater than the given requested
  * file number. */
 static gint
-get_next_file_number(VfsDevice * self, const char * dir_name, guint request) {
+get_next_file_number(VfsDevice * self, guint request) {
     gnfn_data data;
     int count;
     Device *d_self = DEVICE(self);
@@ -942,7 +908,7 @@ get_next_file_number(VfsDevice * self, const char * dir_name, guint request) {
     data.request = request;
     data.best_found = -1;
 
-    count = search_vfs_directory(self, dir_name, "^[0-9]+\\.",
+    count = search_vfs_directory(self, "^[0-9]+\\.",
                                  get_next_file_number_functor, &data);
 
     if (count <= 0) {
@@ -959,13 +925,13 @@ get_next_file_number(VfsDevice * self, const char * dir_name, guint request) {
 
 /* Finds the file number, acquires a lock, and returns the new file name. */
 static
-char * make_new_file_name(VfsDevice * self, const char * dir_name, const dumpfile_t * ji) {
+char * make_new_file_name(VfsDevice * self, const dumpfile_t * ji) {
     char * rval;
     char *base, *sanitary_base;
     int fileno;
 
     for (;;) {
-        fileno = 1 + get_last_file_number(self, dir_name);
+        fileno = 1 + get_last_file_number(self);
         if (fileno <= 0)
             return NULL;
 
@@ -992,14 +958,6 @@ static gboolean
 vfs_device_start_file (Device * dself, dumpfile_t * ji) {
     VfsDevice * self = VFS_DEVICE(dself);
 
-    return vfs_device_start_file_dir(self, self->dir_name, ji);
-}
-
-gboolean
-vfs_device_start_file_dir (VfsDevice *self, const char * dir_name, dumpfile_t * ji) {
-
-    Device *dself = DEVICE(self);
-
     if (device_in_error(self)) return FALSE;
 
     /* set the blocksize in the header to 32k, since the VFS header is always
@@ -1021,7 +979,7 @@ vfs_device_start_file_dir (VfsDevice *self, const char * dir_name, dumpfile_t * 
        4) Write the label.
        5) Chain up. */
 
-    self->file_name = make_new_file_name(self, dir_name, ji);
+    self->file_name = make_new_file_name(self, ji);
     if (self->file_name == NULL) {
 	device_set_error(dself,
 		stralloc(_("Could not create header filename")),
@@ -1076,13 +1034,6 @@ vfs_device_finish_file(Device * dself) {
 static dumpfile_t *
 vfs_device_seek_file (Device * dself, guint requested_file) {
     VfsDevice *self = VFS_DEVICE(dself);
-
-    return vfs_device_seek_file_dir(self, self->dir_name, requested_file);
-}
-
-dumpfile_t *
-vfs_device_seek_file_dir(VfsDevice * self, const char *dir_name, guint requested_file) {
-    Device *dself = DEVICE(self);
     int file;
     dumpfile_t * rval;
     char header_buffer[VFS_DEVICE_LABEL_SIZE];
@@ -1098,7 +1049,7 @@ vfs_device_seek_file_dir(VfsDevice * self, const char *dir_name, guint requested
     release_file(self);
 
     if (requested_file > 0) {
-        file = get_next_file_number(self, dir_name, requested_file);
+        file = get_next_file_number(self, requested_file);
     } else {
         file = requested_file;
     }
@@ -1106,7 +1057,7 @@ vfs_device_seek_file_dir(VfsDevice * self, const char *dir_name, guint requested
     if (file < 0) {
         /* Did they request one past the end? */
         char * tmp_file_name;
-        tmp_file_name = file_number_to_file_name(self, dir_name, requested_file - 1);
+        tmp_file_name = file_number_to_file_name(self, requested_file - 1);
         if (tmp_file_name != NULL) {
             free(tmp_file_name);
 	    dself->file = requested_file; /* other attributes are already correct */
@@ -1126,7 +1077,7 @@ vfs_device_seek_file_dir(VfsDevice * self, const char *dir_name, guint requested
         return NULL;
     }
 
-    self->file_name = file_number_to_file_name(self, dir_name, file);
+    self->file_name = file_number_to_file_name(self, file);
     if (self->file_name == NULL) {
 	device_set_error(dself,
 	    vstrallocf(_("File %d not found"), file),
@@ -1225,16 +1176,8 @@ static gboolean try_unlink(const char * file) {
 static gboolean
 vfs_device_recycle_file (Device * dself, guint filenum) {
     VfsDevice * self = VFS_DEVICE(dself);
-
-    return vfs_device_recycle_file_dir(self, self->dir_name, filenum);
-}
-
-gboolean
-vfs_device_recycle_file_dir (VfsDevice * self, const char * dir_name, guint filenum) {
     struct stat file_status;
     off_t file_size;
-
-    Device *dself = DEVICE(self);
 
     if (device_in_error(self)) return FALSE;
 
@@ -1246,7 +1189,7 @@ vfs_device_recycle_file_dir (VfsDevice * self, const char * dir_name, guint file
      * FIXME: Is it OK to unlink the lockfile?
      */
 
-    self->file_name = file_number_to_file_name(self, dir_name, filenum);
+    self->file_name = file_number_to_file_name(self, filenum);
     if (self->file_name == NULL) {
 	device_set_error(dself,
 	    vstrallocf(_("File %d not found"), filenum),
@@ -1287,16 +1230,10 @@ static gboolean
 vfs_device_erase (Device * dself) {
     VfsDevice *self = VFS_DEVICE(dself);
 
-    return vfs_device_erase_dir(self, self->dir_name);
-}
-
-gboolean
-vfs_device_erase_dir(VfsDevice * self, const char *dir_name) {
-
     if (!open_lock(self, 0, true))
         return false;
 
-    delete_vfs_files(self, dir_name);
+    delete_vfs_files(self);
 
     release_file(self);
 
