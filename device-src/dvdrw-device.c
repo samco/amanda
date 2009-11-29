@@ -376,8 +376,7 @@ dvdrw_device_open_device(Device *dself, char *device_name, char *device_type, ch
 	bzero(&val, sizeof(val));
 
 	colon = index(device_node, ':');
-	if (!colon)
-	{
+	if (!colon) {
 		device_set_error(dself,
 			stralloc(_("DVDRW device requires cache directory and DVD-RW device separated by a colon (:) in tapedev")),
 			DEVICE_STATUS_DEVICE_ERROR);
@@ -406,21 +405,16 @@ dvdrw_device_read_label(Device *dself)
 	if (!check_readable(self)) return DEVICE_STATUS_DEVICE_ERROR;
 
 	status = mount_disc(self, !self->unlabelled_when_unmountable);
-	if (status != DEVICE_STATUS_SUCCESS)
-	{
+	if (status != DEVICE_STATUS_SUCCESS) {
 		/* Not mountable. May be freshly formatted or corrupted, drive may be empty. */
-		if (self->unlabelled_when_unmountable)
-		{
+		if (self->unlabelled_when_unmountable) {
 			return DEVICE_STATUS_VOLUME_UNLABELED;
-		}
-		else
-		{
+		} else {
 			return status;
 		}
 	}
 
-	if ((stat(self->mount_data, &dir_status) < 0) && (errno == ENOENT))
-	{
+	if ((stat(self->mount_data, &dir_status) < 0) && (errno == ENOENT)) {
 		/* No data directory, consider the DVD unlabelled */
 		g_debug("Media contains no data directory and therefore no label");
 		unmount_disc(self);
@@ -454,17 +448,13 @@ dvdrw_device_start(Device *dself, DeviceAccessMode mode, char *label, char *time
 	/* We'll replace this with our own value */
 	amfree(vself->dir_name);
 
-	if (mode == ACCESS_READ)
-	{
-		if (mount_disc(self, TRUE) != DEVICE_STATUS_SUCCESS)
-		{
+	if (mode == ACCESS_READ) {
+		if (mount_disc(self, TRUE) != DEVICE_STATUS_SUCCESS) {
 			return FALSE;
 		}
 
 		vself->dir_name = g_strdup(self->mount_data);
-	}
-	else if (mode == ACCESS_WRITE)
-	{
+	} else if (mode == ACCESS_WRITE) {
 		vself->dir_name = g_strdup(self->cache_data);
 	}
 
@@ -485,10 +475,8 @@ dvdrw_device_finish(Device *dself)
 	/* Save access mode before parent class messes with it */
 	mode = dself->access_mode;
 
-	if (device_in_error(dself))
-	{
-		if (mode == ACCESS_READ)
-		{
+	if (device_in_error(dself)) {
+		if (mode == ACCESS_READ) {
 			/* Still need to do this, don't care if it works or not */
 			unmount_disc(self);
 		}
@@ -498,22 +486,18 @@ dvdrw_device_finish(Device *dself)
 
 	result = parent_class->finish(dself);
 
-	if (mode == ACCESS_READ)
-	{
+	if (mode == ACCESS_READ) {
 		unmount_disc(self);
 	}
 
-	if (! result)
-	{
+	if (! result) {
 		return FALSE;
 	}
 
-	if (mode == ACCESS_WRITE)
-	{
+	if (mode == ACCESS_WRITE) {
 		result = burn_disc(self);
 
-		if (result && !self->keep_cache)
-		{
+		if (result && !self->keep_cache) {
 			delete_vfs_files(vself);
 		}
 
@@ -533,18 +517,14 @@ burn_disc(DvdRwDevice *self)
 		"-J", "-R", "-pad", "-quiet",
 		self->cache_dir, NULL};
 
-	if (self->growisofs_command == NULL)
-	{
+	if (self->growisofs_command == NULL) {
 		burn_argv[0] = "growisofs";
-	}
-	else
-	{
+	} else {
 		burn_argv[0] = self->growisofs_command;
 	}
 
 	g_debug("Burning media in %s", self->dvdrw_device);
-	if (execute_command(self, burn_argv, &status) != DEVICE_STATUS_SUCCESS)
-	{
+	if (execute_command(self, burn_argv, &status) != DEVICE_STATUS_SUCCESS) {
 		return FALSE;
 	}
 	g_debug("Burn completed successfully");
@@ -558,8 +538,7 @@ dvdrw_device_finalize(GObject *gself)
 	DvdRwDevice *self = DVDRW_DEVICE(gself);
 	GObjectClass *parent_class = G_OBJECT_CLASS(g_type_class_peek_parent(DVDRW_DEVICE_GET_CLASS(gself)));
 
-	if (parent_class->finalize)
-	{
+	if (parent_class->finalize) {
 		parent_class->finalize(gself);
 	}
 
@@ -579,12 +558,9 @@ check_access_mode(DvdRwDevice *self, DeviceAccessMode mode)
 {
 	Device *dself = DEVICE(self);
 
-	if (mode == ACCESS_READ)
-	{
+	if (mode == ACCESS_READ) {
 		return check_readable(self);
-	}
-	else if (mode == ACCESS_WRITE)
-	{
+	} else if (mode == ACCESS_WRITE) {
 		return TRUE;
 	}
 
@@ -602,8 +578,7 @@ check_readable(DvdRwDevice *self)
 	GValue value;
 	bzero(&value, sizeof(value));
 
-	if (! device_get_simple_property(dself, PROPERTY_DVDRW_MOUNT_POINT, &value, NULL, NULL))
-	{
+	if (! device_get_simple_property(dself, PROPERTY_DVDRW_MOUNT_POINT, &value, NULL, NULL)) {
 		device_set_error(dself,
 			stralloc(_("DVDRW device requires DVDRW_MOUNT_POINT to open device for reading")),
 			DEVICE_STATUS_DEVICE_ERROR);
@@ -621,29 +596,22 @@ mount_disc(DvdRwDevice *self, gboolean report_error)
 	gchar *mount_argv[] = { NULL, self->mount_point, NULL };
 	DeviceStatusFlags status;
 
-	if (self->mount_command == NULL)
-	{
+	if (self->mount_command == NULL) {
 		mount_argv[0] = "mount";
-	}
-	else
-	{
+	} else {
 		mount_argv[0] = self->mount_command;
 	}
 
 	g_debug("Mounting media at %s", self->mount_point);
 	status = execute_command(report_error ? self : NULL, mount_argv, NULL);
-	if (status != DEVICE_STATUS_SUCCESS)
-	{
+	if (status != DEVICE_STATUS_SUCCESS) {
 		/* Wait a few seconds and try again - The tray may still be out after burning */
 		sleep(3);
-		if (execute_command(report_error ? self : NULL, mount_argv, NULL) == DEVICE_STATUS_SUCCESS)
-		{
+		if (execute_command(report_error ? self : NULL, mount_argv, NULL) == DEVICE_STATUS_SUCCESS) {
 			/* Clear error */
 			device_set_error(dself, NULL, DEVICE_STATUS_SUCCESS);
 			return DEVICE_STATUS_SUCCESS;
-		}
-		else
-		{
+		} else {
 			return status;
 		}
 	}
@@ -656,12 +624,9 @@ unmount_disc(DvdRwDevice *self)
 {
 	gchar *unmount_argv[] = { NULL, self->mount_point, NULL };
 
-	if (self->umount_command == NULL)
-	{
+	if (self->umount_command == NULL) {
 		unmount_argv[0] = "umount";
-	}
-	else
-	{
+	} else {
 		unmount_argv[0] = self->umount_command;
 	}
 
@@ -687,47 +652,36 @@ execute_command(DvdRwDevice *self, gchar **argv, gint *result)
 
 	/* g_debug("Execution complete"); */
 
-	if (WIFSIGNALED(errnum))
-	{
+	if (WIFSIGNALED(errnum)) {
 		success = FALSE;
 		signum = WTERMSIG(errnum);
-	}
-	else if (WIFEXITED(errnum))
-	{
+	} else if (WIFEXITED(errnum)) {
 	    success = (WEXITSTATUS(errnum) == 0);
-	}
-	else
-	{
+	} else {
 	    success = FALSE;
 	}
 
-	if (!success)
-	{
+	if (!success) {
 		gchar *error_message = vstrallocf(_("DVDRW device cannot execute '%s': %s (status: %d) (stderr: %s)"),
 			argv[0], error ? error->message : _("Unknown error"), errnum, std_error ? std_error: "No stderr");
 
-		if (dself != NULL)
-		{
+		if (dself != NULL) {
 			device_set_error(dself, error_message, DEVICE_STATUS_DEVICE_ERROR);
 		}
 
-		if (std_output)
-		{
+		if (std_output) {
 			g_free(std_output);
 		}
 
-		if (std_error)
-		{
+		if (std_error) {
 			g_free(std_error);
 		}
 
-		if (error)
-		{
+		if (error) {
 			g_error_free(error);
 		}
 
-		if (result != NULL)
-		{
+		if (result != NULL) {
 			*result = errnum;
 		}
 
