@@ -44,18 +44,18 @@ static GType dvdrw_device_get_type(void);
  */
 typedef struct _DvdRwDevice DvdRwDevice;
 struct _DvdRwDevice {
-	VfsDevice __parent__;
+    VfsDevice __parent__;
 
-	gchar *dvdrw_device;
-	gchar *cache_dir;
-	gchar *cache_data;
-	gchar *mount_point;
-	gchar *mount_data;
-	gboolean keep_cache;
-	gboolean unlabelled_when_unmountable;
-	gchar *growisofs_command;
-	gchar *mount_command;
-	gchar *umount_command;
+    gchar *dvdrw_device;
+    gchar *cache_dir;
+    gchar *cache_data;
+    gchar *mount_point;
+    gchar *mount_data;
+    gboolean keep_cache;
+    gboolean unlabelled_when_unmountable;
+    gchar *growisofs_command;
+    gchar *mount_command;
+    gchar *umount_command;
 };
 
 /*
@@ -63,7 +63,7 @@ struct _DvdRwDevice {
  */
 typedef struct _DvdRwDeviceClass DvdRwDeviceClass;
 struct _DvdRwDeviceClass {
-	VfsDeviceClass __parent__;
+    VfsDeviceClass __parent__;
 };
 
 G_DEFINE_TYPE(DvdRwDevice, dvdrw_device, TYPE_VFS_DEVICE)
@@ -108,27 +108,33 @@ dvdrw_device_init (DvdRwDevice *self);
 /* Properties */
 static gboolean
 dvdrw_device_set_mount_point_fn(Device *self,
-	DevicePropertyBase *base, GValue *val, PropertySurety surety, PropertySource source);
+    DevicePropertyBase *base, GValue *val,
+    PropertySurety surety, PropertySource source);
 
 static gboolean
 dvdrw_device_set_keep_cache_fn(Device *self,
-	DevicePropertyBase *base, GValue *val, PropertySurety surety, PropertySource source);
+    DevicePropertyBase *base, GValue *val,
+    PropertySurety surety, PropertySource source);
 
 static gboolean
 dvdrw_device_set_unlabelled_when_unmountable_fn(Device *self,
-	DevicePropertyBase *base, GValue *val, PropertySurety surety, PropertySource source);
+    DevicePropertyBase *base, GValue *val,
+    PropertySurety surety, PropertySource source);
 
 static gboolean
 dvdrw_device_set_growisofs_command_fn(Device *self,
-	DevicePropertyBase *base, GValue *val, PropertySurety surety, PropertySource source);
+    DevicePropertyBase *base, GValue *val,
+    PropertySurety surety, PropertySource source);
 
 static gboolean
 dvdrw_device_set_mount_command_fn(Device *self,
-	DevicePropertyBase *base, GValue *val, PropertySurety surety, PropertySource source);
+    DevicePropertyBase *base, GValue *val,
+    PropertySurety surety, PropertySource source);
 
 static gboolean
 dvdrw_device_set_umount_command_fn(Device *self,
-	DevicePropertyBase *base, GValue *val, PropertySurety surety, PropertySource source);
+    DevicePropertyBase *base, GValue *val,
+    PropertySurety surety, PropertySource source);
 
 /* Methods */
 static void
@@ -168,525 +174,525 @@ execute_command(DvdRwDevice *self, gchar **argv, gint *status);
 void
 dvdrw_device_register(void)
 {
-	const char *device_prefix_list[] = { "dvdrw", NULL };
+    const char *device_prefix_list[] = { "dvdrw", NULL };
 
-	device_property_fill_and_register(&device_property_dvdrw_mount_point,
-		G_TYPE_STRING, "dvdrw_mount_point",
-		"Directory to mount DVD-RW for reading");
+    device_property_fill_and_register(&device_property_dvdrw_mount_point,
+	G_TYPE_STRING, "dvdrw_mount_point",
+	"Directory to mount DVD-RW for reading");
 
-	device_property_fill_and_register(&device_property_dvdrw_keep_cache,
-		G_TYPE_BOOLEAN, "dvdrw_keep_cache",
-		"Keep on-disk cache after DVD-RW has been written");
+    device_property_fill_and_register(&device_property_dvdrw_keep_cache,
+	G_TYPE_BOOLEAN, "dvdrw_keep_cache",
+	"Keep on-disk cache after DVD-RW has been written");
 
-	device_property_fill_and_register(&device_property_dvdrw_unlabelled_when_unmountable,
-		G_TYPE_BOOLEAN, "dvdrw_unlabelled_when_unmountable",
-		"Treat unmountable volumes as unlabelled when reading label");
+    device_property_fill_and_register(&device_property_dvdrw_unlabelled_when_unmountable,
+	G_TYPE_BOOLEAN, "dvdrw_unlabelled_when_unmountable",
+	"Treat unmountable volumes as unlabelled when reading label");
 
-	device_property_fill_and_register(&device_property_dvdrw_growisofs_command,
-		G_TYPE_BOOLEAN, "dvdrw_growisofs_command",
-		"The location of the growisofs command used to write the DVD-RW");
+    device_property_fill_and_register(&device_property_dvdrw_growisofs_command,
+	G_TYPE_BOOLEAN, "dvdrw_growisofs_command",
+	"The location of the growisofs command used to write the DVD-RW");
 
-	device_property_fill_and_register(&device_property_dvdrw_mount_command,
-		G_TYPE_BOOLEAN, "dvdrw_mount_command",
-		"The location of the mount command used to mount the DVD-RW filesystem for reading");
+    device_property_fill_and_register(&device_property_dvdrw_mount_command,
+	G_TYPE_BOOLEAN, "dvdrw_mount_command",
+	"The location of the mount command used to mount the DVD-RW filesystem for reading");
 
-	device_property_fill_and_register(&device_property_dvdrw_umount_command,
-		G_TYPE_BOOLEAN, "dvdrw_umount_command",
-		"The location of the umount command used to unmount the DVD-RW filesystem after reading");
+    device_property_fill_and_register(&device_property_dvdrw_umount_command,
+	G_TYPE_BOOLEAN, "dvdrw_umount_command",
+	"The location of the umount command used to unmount the DVD-RW filesystem after reading");
 
-	register_device(dvdrw_device_factory, device_prefix_list);
+    register_device(dvdrw_device_factory, device_prefix_list);
 }
 
 static Device *
 dvdrw_device_factory(char *device_name, char *device_type, char *device_node)
 {
-	Device *device;
+    Device *device;
 
-	g_assert(0 == strncmp(device_type, "dvdrw", strlen("dvdrw")));
+    g_assert(0 == strncmp(device_type, "dvdrw", strlen("dvdrw")));
 
-	device = DEVICE(g_object_new(TYPE_DVDRW_DEVICE, NULL));
-	device_open_device(device, device_name, device_type, device_node);
+    device = DEVICE(g_object_new(TYPE_DVDRW_DEVICE, NULL));
+    device_open_device(device, device_name, device_type, device_node);
 
-	return device;
+    return device;
 }
 
 static void
 dvdrw_device_class_init (DvdRwDeviceClass *c)
 {
-	DeviceClass *device_class = DEVICE_CLASS(c);
-	GObjectClass *g_object_class = G_OBJECT_CLASS(c);
+    DeviceClass *device_class = DEVICE_CLASS(c);
+    GObjectClass *g_object_class = G_OBJECT_CLASS(c);
 
-	device_class->open_device = dvdrw_device_open_device;
-	device_class->read_label = dvdrw_device_read_label;
-	device_class->start = dvdrw_device_start;
-	device_class->finish = dvdrw_device_finish;
+    device_class->open_device = dvdrw_device_open_device;
+    device_class->read_label = dvdrw_device_read_label;
+    device_class->start = dvdrw_device_start;
+    device_class->finish = dvdrw_device_finish;
 
-	g_object_class->finalize = dvdrw_device_finalize;
+    g_object_class->finalize = dvdrw_device_finalize;
 
-	device_class_register_property(device_class, PROPERTY_DVDRW_MOUNT_POINT,
-		PROPERTY_ACCESS_GET_MASK | PROPERTY_ACCESS_SET_BEFORE_START,
-		device_simple_property_get_fn,
-		dvdrw_device_set_mount_point_fn);
+    device_class_register_property(device_class, PROPERTY_DVDRW_MOUNT_POINT,
+	PROPERTY_ACCESS_GET_MASK | PROPERTY_ACCESS_SET_BEFORE_START,
+	device_simple_property_get_fn,
+	dvdrw_device_set_mount_point_fn);
 
-	device_class_register_property(device_class, PROPERTY_DVDRW_KEEP_CACHE,
-		PROPERTY_ACCESS_GET_MASK | PROPERTY_ACCESS_SET_BEFORE_START,
-		device_simple_property_get_fn,
-		dvdrw_device_set_keep_cache_fn);
+    device_class_register_property(device_class, PROPERTY_DVDRW_KEEP_CACHE,
+	PROPERTY_ACCESS_GET_MASK | PROPERTY_ACCESS_SET_BEFORE_START,
+	device_simple_property_get_fn,
+	dvdrw_device_set_keep_cache_fn);
 
-	device_class_register_property(device_class, PROPERTY_DVDRW_UNLABELLED_WHEN_UNMOUNTABLE,
-		PROPERTY_ACCESS_GET_MASK | PROPERTY_ACCESS_SET_BEFORE_START,
-		device_simple_property_get_fn,
-		dvdrw_device_set_unlabelled_when_unmountable_fn);
+    device_class_register_property(device_class, PROPERTY_DVDRW_UNLABELLED_WHEN_UNMOUNTABLE,
+	PROPERTY_ACCESS_GET_MASK | PROPERTY_ACCESS_SET_BEFORE_START,
+	device_simple_property_get_fn,
+	dvdrw_device_set_unlabelled_when_unmountable_fn);
 
-	device_class_register_property(device_class, PROPERTY_DVDRW_GROWISOFS_COMMAND,
-		PROPERTY_ACCESS_GET_MASK | PROPERTY_ACCESS_SET_BEFORE_START,
-		device_simple_property_get_fn,
-		dvdrw_device_set_growisofs_command_fn);
+    device_class_register_property(device_class, PROPERTY_DVDRW_GROWISOFS_COMMAND,
+	PROPERTY_ACCESS_GET_MASK | PROPERTY_ACCESS_SET_BEFORE_START,
+	device_simple_property_get_fn,
+	dvdrw_device_set_growisofs_command_fn);
 
-	device_class_register_property(device_class, PROPERTY_DVDRW_MOUNT_COMMAND,
-		PROPERTY_ACCESS_GET_MASK | PROPERTY_ACCESS_SET_BEFORE_START,
-		device_simple_property_get_fn,
-		dvdrw_device_set_mount_command_fn);
+    device_class_register_property(device_class, PROPERTY_DVDRW_MOUNT_COMMAND,
+	PROPERTY_ACCESS_GET_MASK | PROPERTY_ACCESS_SET_BEFORE_START,
+	device_simple_property_get_fn,
+	dvdrw_device_set_mount_command_fn);
 
-	device_class_register_property(device_class, PROPERTY_DVDRW_UMOUNT_COMMAND,
-		PROPERTY_ACCESS_GET_MASK | PROPERTY_ACCESS_SET_BEFORE_START,
-		device_simple_property_get_fn,
-		dvdrw_device_set_umount_command_fn);
+    device_class_register_property(device_class, PROPERTY_DVDRW_UMOUNT_COMMAND,
+	PROPERTY_ACCESS_GET_MASK | PROPERTY_ACCESS_SET_BEFORE_START,
+	device_simple_property_get_fn,
+	dvdrw_device_set_umount_command_fn);
 }
 
 static void
 dvdrw_device_init (DvdRwDevice *self)
 {
-	Device *dself = DEVICE(self);
-	GValue val;
+    Device *dself = DEVICE(self);
+    GValue val;
 
-	self->dvdrw_device = NULL;
-	self->cache_dir = NULL;
-	self->cache_data = NULL;
-	self->mount_point = NULL;
-	self->mount_data = NULL;
-	self->keep_cache = FALSE;
-	self->growisofs_command = NULL;
-	self->mount_command = NULL;
-	self->umount_command = NULL;
+    self->dvdrw_device = NULL;
+    self->cache_dir = NULL;
+    self->cache_data = NULL;
+    self->mount_point = NULL;
+    self->mount_data = NULL;
+    self->keep_cache = FALSE;
+    self->growisofs_command = NULL;
+    self->mount_command = NULL;
+    self->umount_command = NULL;
 
-	bzero(&val, sizeof(val));
+    bzero(&val, sizeof(val));
 
-	g_value_init(&val, G_TYPE_BOOLEAN);
-	g_value_set_boolean(&val, FALSE);
-	device_set_simple_property(dself, PROPERTY_APPENDABLE,
-		&val, PROPERTY_SURETY_GOOD, PROPERTY_SOURCE_DETECTED);
-	g_value_unset(&val);
+    g_value_init(&val, G_TYPE_BOOLEAN);
+    g_value_set_boolean(&val, FALSE);
+    device_set_simple_property(dself, PROPERTY_APPENDABLE,
+	&val, PROPERTY_SURETY_GOOD, PROPERTY_SOURCE_DETECTED);
+    g_value_unset(&val);
 
-	g_value_init(&val, G_TYPE_BOOLEAN);
-	g_value_set_boolean(&val, FALSE);
-	device_set_simple_property(dself, PROPERTY_PARTIAL_DELETION,
-		&val, PROPERTY_SURETY_GOOD, PROPERTY_SOURCE_DETECTED);
-	g_value_unset(&val);
+    g_value_init(&val, G_TYPE_BOOLEAN);
+    g_value_set_boolean(&val, FALSE);
+    device_set_simple_property(dself, PROPERTY_PARTIAL_DELETION,
+	&val, PROPERTY_SURETY_GOOD, PROPERTY_SOURCE_DETECTED);
+    g_value_unset(&val);
 
-	g_value_init(&val, G_TYPE_BOOLEAN);
-	g_value_set_boolean(&val, FALSE);
-	device_set_simple_property(dself, PROPERTY_FULL_DELETION,
-		&val, PROPERTY_SURETY_GOOD, PROPERTY_SOURCE_DETECTED);
-	g_value_unset(&val);
+    g_value_init(&val, G_TYPE_BOOLEAN);
+    g_value_set_boolean(&val, FALSE);
+    device_set_simple_property(dself, PROPERTY_FULL_DELETION,
+	&val, PROPERTY_SURETY_GOOD, PROPERTY_SOURCE_DETECTED);
+    g_value_unset(&val);
 }
 
 static gboolean
 dvdrw_device_set_mount_point_fn(Device *dself, DevicePropertyBase *base,
-	GValue *val, PropertySurety surety, PropertySource source)
+    GValue *val, PropertySurety surety, PropertySource source)
 {
-	DvdRwDevice *self = DVDRW_DEVICE(dself);
+    DvdRwDevice *self = DVDRW_DEVICE(dself);
 
-	amfree(self->mount_point);
-	amfree(self->mount_data);
+    amfree(self->mount_point);
+    amfree(self->mount_data);
 
-	self->mount_point = g_value_dup_string(val);
-	self->mount_data = g_strconcat(self->mount_point, "/data/", NULL);
+    self->mount_point = g_value_dup_string(val);
+    self->mount_data = g_strconcat(self->mount_point, "/data/", NULL);
 
-	device_clear_volume_details(dself);
+    device_clear_volume_details(dself);
 
-	return device_simple_property_set_fn(dself, base, val, surety, source);
+    return device_simple_property_set_fn(dself, base, val, surety, source);
 }
 
 static gboolean
 dvdrw_device_set_keep_cache_fn(Device *dself, DevicePropertyBase *base,
-	GValue *val, PropertySurety surety, PropertySource source)
+    GValue *val, PropertySurety surety, PropertySource source)
 {
-	DvdRwDevice *self = DVDRW_DEVICE(dself);
+    DvdRwDevice *self = DVDRW_DEVICE(dself);
 
-	self->keep_cache = g_value_get_boolean(val);
+    self->keep_cache = g_value_get_boolean(val);
 
-	return device_simple_property_set_fn(dself, base, val, surety, source);
+    return device_simple_property_set_fn(dself, base, val, surety, source);
 }
 
 static gboolean
 dvdrw_device_set_unlabelled_when_unmountable_fn(Device *dself, DevicePropertyBase *base,
-	GValue *val, PropertySurety surety, PropertySource source)
+    GValue *val, PropertySurety surety, PropertySource source)
 {
-	DvdRwDevice *self = DVDRW_DEVICE(dself);
+    DvdRwDevice *self = DVDRW_DEVICE(dself);
 
-	self->unlabelled_when_unmountable = g_value_get_boolean(val);
+    self->unlabelled_when_unmountable = g_value_get_boolean(val);
 
-	return device_simple_property_set_fn(dself, base, val, surety, source);
+    return device_simple_property_set_fn(dself, base, val, surety, source);
 }
 
 static gboolean
 dvdrw_device_set_growisofs_command_fn(Device *dself, DevicePropertyBase *base,
-	GValue *val, PropertySurety surety, PropertySource source)
+    GValue *val, PropertySurety surety, PropertySource source)
 {
-	DvdRwDevice *self = DVDRW_DEVICE(dself);
+    DvdRwDevice *self = DVDRW_DEVICE(dself);
 
-	self->growisofs_command = g_value_dup_string(val);
+    self->growisofs_command = g_value_dup_string(val);
 
-	return device_simple_property_set_fn(dself, base, val, surety, source);
+    return device_simple_property_set_fn(dself, base, val, surety, source);
 }
 
 static gboolean
 dvdrw_device_set_mount_command_fn(Device *dself, DevicePropertyBase *base,
-	GValue *val, PropertySurety surety, PropertySource source)
+    GValue *val, PropertySurety surety, PropertySource source)
 {
-	DvdRwDevice *self = DVDRW_DEVICE(dself);
+    DvdRwDevice *self = DVDRW_DEVICE(dself);
 
-	self->mount_command = g_value_dup_string(val);
+    self->mount_command = g_value_dup_string(val);
 
-	return device_simple_property_set_fn(dself, base, val, surety, source);
+    return device_simple_property_set_fn(dself, base, val, surety, source);
 }
 
 static gboolean
 dvdrw_device_set_umount_command_fn(Device *dself, DevicePropertyBase *base,
-	GValue *val, PropertySurety surety, PropertySource source)
+    GValue *val, PropertySurety surety, PropertySource source)
 {
-	DvdRwDevice *self = DVDRW_DEVICE(dself);
+    DvdRwDevice *self = DVDRW_DEVICE(dself);
 
-	self->umount_command = g_value_dup_string(val);
+    self->umount_command = g_value_dup_string(val);
 
-	return device_simple_property_set_fn(dself, base, val, surety, source);
+    return device_simple_property_set_fn(dself, base, val, surety, source);
 }
 
 static void
 dvdrw_device_open_device(Device *dself, char *device_name, char *device_type, char *device_node)
 {
-	DvdRwDevice *self = DVDRW_DEVICE(dself);
-	DeviceClass *parent_class = DEVICE_CLASS(g_type_class_peek_parent(DVDRW_DEVICE_GET_CLASS(dself)));
-	GValue val;
-	char *colon;
+    DvdRwDevice *self = DVDRW_DEVICE(dself);
+    DeviceClass *parent_class = DEVICE_CLASS(g_type_class_peek_parent(DVDRW_DEVICE_GET_CLASS(dself)));
+    GValue val;
+    char *colon;
 
-	g_debug("Opening device: %s", device_node);
+    g_debug("Opening device: %s", device_node);
 
-	bzero(&val, sizeof(val));
+    bzero(&val, sizeof(val));
 
-	colon = index(device_node, ':');
-	if (!colon) {
-		device_set_error(dself,
-			stralloc(_("DVDRW device requires cache directory and DVD-RW device separated by a colon (:) in tapedev")),
-			DEVICE_STATUS_DEVICE_ERROR);
-		return;
-	}
+    colon = index(device_node, ':');
+    if (!colon) {
+	device_set_error(dself,
+	    stralloc(_("DVDRW device requires cache directory and DVD-RW device separated by a colon (:) in tapedev")),
+	    DEVICE_STATUS_DEVICE_ERROR);
+	return;
+    }
 
-	self->cache_dir = g_strndup(device_node, colon - device_node);
-	self->cache_data = g_strconcat(self->cache_dir, "/data/", NULL);
-	self->dvdrw_device = g_strdup(colon + 1);
+    self->cache_dir = g_strndup(device_node, colon - device_node);
+    self->cache_data = g_strconcat(self->cache_dir, "/data/", NULL);
+    self->dvdrw_device = g_strdup(colon + 1);
 
-	parent_class->open_device(dself, device_name, device_type, device_node);
+    parent_class->open_device(dself, device_name, device_type, device_node);
 }
 
 static DeviceStatusFlags
 dvdrw_device_read_label(Device *dself)
 {
-	DvdRwDevice *self = DVDRW_DEVICE(dself);
-	VfsDevice *vself = VFS_DEVICE(dself);
-	DeviceStatusFlags status;
-	struct stat dir_status;
-	DeviceClass *parent_class = DEVICE_CLASS(g_type_class_peek_parent(DVDRW_DEVICE_GET_CLASS(dself)));
+    DvdRwDevice *self = DVDRW_DEVICE(dself);
+    VfsDevice *vself = VFS_DEVICE(dself);
+    DeviceStatusFlags status;
+    struct stat dir_status;
+    DeviceClass *parent_class = DEVICE_CLASS(g_type_class_peek_parent(DVDRW_DEVICE_GET_CLASS(dself)));
 
-	g_debug("Reading label from media at %s", self->mount_point);
+    g_debug("Reading label from media at %s", self->mount_point);
 
-	if (device_in_error(dself)) return DEVICE_STATUS_DEVICE_ERROR;
-	if (!check_readable(self)) return DEVICE_STATUS_DEVICE_ERROR;
+    if (device_in_error(dself)) return DEVICE_STATUS_DEVICE_ERROR;
+    if (!check_readable(self)) return DEVICE_STATUS_DEVICE_ERROR;
 
-	status = mount_disc(self, !self->unlabelled_when_unmountable);
-	if (status != DEVICE_STATUS_SUCCESS) {
-		/* Not mountable. May be freshly formatted or corrupted, drive may be empty. */
-		if (self->unlabelled_when_unmountable) {
-			return DEVICE_STATUS_VOLUME_UNLABELED;
-		} else {
-			return status;
-		}
+    status = mount_disc(self, !self->unlabelled_when_unmountable);
+    if (status != DEVICE_STATUS_SUCCESS) {
+	/* Not mountable. May be freshly formatted or corrupted, drive may be empty. */
+	if (self->unlabelled_when_unmountable) {
+	    return DEVICE_STATUS_VOLUME_UNLABELED;
+	} else {
+	    return status;
 	}
+    }
 
-	if ((stat(self->mount_data, &dir_status) < 0) && (errno == ENOENT)) {
-		/* No data directory, consider the DVD unlabelled */
-		g_debug("Media contains no data directory and therefore no label");
-		unmount_disc(self);
-
-		return DEVICE_STATUS_VOLUME_UNLABELED;
-	}
-
-	amfree(vself->dir_name);
-	vself->dir_name = g_strdup(self->mount_data);
-	status = parent_class->read_label(dself);
-
+    if ((stat(self->mount_data, &dir_status) < 0) && (errno == ENOENT)) {
+	/* No data directory, consider the DVD unlabelled */
+	g_debug("Media contains no data directory and therefore no label");
 	unmount_disc(self);
 
-	return status;
+	return DEVICE_STATUS_VOLUME_UNLABELED;
+    }
+
+    amfree(vself->dir_name);
+    vself->dir_name = g_strdup(self->mount_data);
+    status = parent_class->read_label(dself);
+
+    unmount_disc(self);
+
+    return status;
 }
 
 static gboolean
 dvdrw_device_start(Device *dself, DeviceAccessMode mode, char *label, char *timestamp)
 {
-	DvdRwDevice *self = DVDRW_DEVICE(dself);
-	VfsDevice *vself = VFS_DEVICE(dself);
-	DeviceClass *parent_class = DEVICE_CLASS(g_type_class_peek_parent(DVDRW_DEVICE_GET_CLASS(dself)));
+    DvdRwDevice *self = DVDRW_DEVICE(dself);
+    VfsDevice *vself = VFS_DEVICE(dself);
+    DeviceClass *parent_class = DEVICE_CLASS(g_type_class_peek_parent(DVDRW_DEVICE_GET_CLASS(dself)));
 
-	g_debug("Start DVDRW device");
+    g_debug("Start DVDRW device");
 
-	if (device_in_error(dself)) return FALSE;
-	if (!check_access_mode(self, mode)) return FALSE;
+    if (device_in_error(dself)) return FALSE;
+    if (!check_access_mode(self, mode)) return FALSE;
 
-	dself->access_mode = mode;
+    dself->access_mode = mode;
 
-	/* We'll replace this with our own value */
-	amfree(vself->dir_name);
+    /* We'll replace this with our own value */
+    amfree(vself->dir_name);
 
-	if (mode == ACCESS_READ) {
-		if (mount_disc(self, TRUE) != DEVICE_STATUS_SUCCESS) {
-			return FALSE;
-		}
-
-		vself->dir_name = g_strdup(self->mount_data);
-	} else if (mode == ACCESS_WRITE) {
-		vself->dir_name = g_strdup(self->cache_data);
+    if (mode == ACCESS_READ) {
+	if (mount_disc(self, TRUE) != DEVICE_STATUS_SUCCESS) {
+	    return FALSE;
 	}
 
-	return parent_class->start(dself, mode, label, timestamp);
+	vself->dir_name = g_strdup(self->mount_data);
+    } else if (mode == ACCESS_WRITE) {
+	vself->dir_name = g_strdup(self->cache_data);
+    }
+
+    return parent_class->start(dself, mode, label, timestamp);
 }
 
 static gboolean
 dvdrw_device_finish(Device *dself)
 {
-	DvdRwDevice *self = DVDRW_DEVICE(dself);
-	VfsDevice *vself = VFS_DEVICE(dself);
-	gboolean result;
-	DeviceClass *parent_class = DEVICE_CLASS(g_type_class_peek_parent(DVDRW_DEVICE_GET_CLASS(dself)));
-	DeviceAccessMode mode;
+    DvdRwDevice *self = DVDRW_DEVICE(dself);
+    VfsDevice *vself = VFS_DEVICE(dself);
+    gboolean result;
+    DeviceClass *parent_class = DEVICE_CLASS(g_type_class_peek_parent(DVDRW_DEVICE_GET_CLASS(dself)));
+    DeviceAccessMode mode;
 
-	g_debug("Finish DVDRW device");
+    g_debug("Finish DVDRW device");
 
-	/* Save access mode before parent class messes with it */
-	mode = dself->access_mode;
+    /* Save access mode before parent class messes with it */
+    mode = dself->access_mode;
 
-	if (device_in_error(dself)) {
-		if (mode == ACCESS_READ) {
-			/* Still need to do this, don't care if it works or not */
-			unmount_disc(self);
-		}
-
-		return FALSE;
-	}
-
-	result = parent_class->finish(dself);
-
+    if (device_in_error(dself)) {
 	if (mode == ACCESS_READ) {
-		unmount_disc(self);
+	    /* Still need to do this, don't care if it works or not */
+	    unmount_disc(self);
 	}
 
-	if (! result) {
-		return FALSE;
+	return FALSE;
+    }
+
+    result = parent_class->finish(dself);
+
+    if (mode == ACCESS_READ) {
+	unmount_disc(self);
+    }
+
+    if (! result) {
+	return FALSE;
+    }
+
+    if (mode == ACCESS_WRITE) {
+	result = burn_disc(self);
+
+	if (result && !self->keep_cache) {
+	    delete_vfs_files(vself);
 	}
 
-	if (mode == ACCESS_WRITE) {
-		result = burn_disc(self);
+	return result;
+    }
 
-		if (result && !self->keep_cache) {
-			delete_vfs_files(vself);
-		}
-
-		return result;
-	}
-
-	return TRUE;
+    return TRUE;
 }
 
 static gboolean
 burn_disc(DvdRwDevice *self)
 {
-	gint status;
+    gint status;
 
-	char *burn_argv[] = {NULL, "-use-the-force-luke",
-		"-Z", self->dvdrw_device,
-		"-J", "-R", "-pad", "-quiet",
-		self->cache_dir, NULL};
+    char *burn_argv[] = {NULL, "-use-the-force-luke",
+	"-Z", self->dvdrw_device,
+	"-J", "-R", "-pad", "-quiet",
+	self->cache_dir, NULL};
 
-	if (self->growisofs_command == NULL) {
-		burn_argv[0] = "growisofs";
-	} else {
-		burn_argv[0] = self->growisofs_command;
-	}
+    if (self->growisofs_command == NULL) {
+	burn_argv[0] = "growisofs";
+    } else {
+	burn_argv[0] = self->growisofs_command;
+    }
 
-	g_debug("Burning media in %s", self->dvdrw_device);
-	if (execute_command(self, burn_argv, &status) != DEVICE_STATUS_SUCCESS) {
-		return FALSE;
-	}
-	g_debug("Burn completed successfully");
+    g_debug("Burning media in %s", self->dvdrw_device);
+    if (execute_command(self, burn_argv, &status) != DEVICE_STATUS_SUCCESS) {
+	return FALSE;
+    }
+    g_debug("Burn completed successfully");
 
-	return TRUE;
+    return TRUE;
 }
 
 static void
 dvdrw_device_finalize(GObject *gself)
 {
-	DvdRwDevice *self = DVDRW_DEVICE(gself);
-	GObjectClass *parent_class = G_OBJECT_CLASS(g_type_class_peek_parent(DVDRW_DEVICE_GET_CLASS(gself)));
+    DvdRwDevice *self = DVDRW_DEVICE(gself);
+    GObjectClass *parent_class = G_OBJECT_CLASS(g_type_class_peek_parent(DVDRW_DEVICE_GET_CLASS(gself)));
 
-	if (parent_class->finalize) {
-		parent_class->finalize(gself);
-	}
+    if (parent_class->finalize) {
+	parent_class->finalize(gself);
+    }
 
-	amfree(self->dvdrw_device);
+    amfree(self->dvdrw_device);
 
-	amfree(self->cache_dir);
-	amfree(self->cache_data);
-	amfree(self->mount_point);
-	amfree(self->mount_data);
-	amfree(self->growisofs_command);
-	amfree(self->mount_command);
-	amfree(self->umount_command);
+    amfree(self->cache_dir);
+    amfree(self->cache_data);
+    amfree(self->mount_point);
+    amfree(self->mount_data);
+    amfree(self->growisofs_command);
+    amfree(self->mount_command);
+    amfree(self->umount_command);
 }
 
 static gboolean
 check_access_mode(DvdRwDevice *self, DeviceAccessMode mode)
 {
-	Device *dself = DEVICE(self);
+    Device *dself = DEVICE(self);
 
-	if (mode == ACCESS_READ) {
-		return check_readable(self);
-	} else if (mode == ACCESS_WRITE) {
-		return TRUE;
-	}
+    if (mode == ACCESS_READ) {
+	return check_readable(self);
+    } else if (mode == ACCESS_WRITE) {
+	return TRUE;
+    }
 
-	device_set_error(dself,
-		stralloc(_("DVDRW device can only be opened in READ or WRITE mode")),
-		DEVICE_STATUS_DEVICE_ERROR);
+    device_set_error(dself,
+	stralloc(_("DVDRW device can only be opened in READ or WRITE mode")),
+	DEVICE_STATUS_DEVICE_ERROR);
 
-	return FALSE;
+    return FALSE;
 }
 
 static gboolean
 check_readable(DvdRwDevice *self)
 {
-	Device *dself = DEVICE(self);
-	GValue value;
-	bzero(&value, sizeof(value));
+    Device *dself = DEVICE(self);
+    GValue value;
+    bzero(&value, sizeof(value));
 
-	if (! device_get_simple_property(dself, PROPERTY_DVDRW_MOUNT_POINT, &value, NULL, NULL)) {
-		device_set_error(dself,
-			stralloc(_("DVDRW device requires DVDRW_MOUNT_POINT to open device for reading")),
-			DEVICE_STATUS_DEVICE_ERROR);
+    if (! device_get_simple_property(dself, PROPERTY_DVDRW_MOUNT_POINT, &value, NULL, NULL)) {
+	device_set_error(dself,
+	    stralloc(_("DVDRW device requires DVDRW_MOUNT_POINT to open device for reading")),
+	    DEVICE_STATUS_DEVICE_ERROR);
 
-		return FALSE;
-	}
+	return FALSE;
+    }
 
-	return TRUE;
+    return TRUE;
 }
 
 static DeviceStatusFlags
 mount_disc(DvdRwDevice *self, gboolean report_error)
 {
-	Device *dself = DEVICE(self);
-	gchar *mount_argv[] = { NULL, self->mount_point, NULL };
-	DeviceStatusFlags status;
+    Device *dself = DEVICE(self);
+    gchar *mount_argv[] = { NULL, self->mount_point, NULL };
+    DeviceStatusFlags status;
 
-	if (self->mount_command == NULL) {
-		mount_argv[0] = "mount";
+    if (self->mount_command == NULL) {
+	mount_argv[0] = "mount";
+    } else {
+	mount_argv[0] = self->mount_command;
+    }
+
+    g_debug("Mounting media at %s", self->mount_point);
+    status = execute_command(report_error ? self : NULL, mount_argv, NULL);
+    if (status != DEVICE_STATUS_SUCCESS) {
+	/* Wait a few seconds and try again - The tray may still be out after burning */
+	sleep(3);
+	if (execute_command(report_error ? self : NULL, mount_argv, NULL) == DEVICE_STATUS_SUCCESS) {
+	    /* Clear error */
+	    device_set_error(dself, NULL, DEVICE_STATUS_SUCCESS);
+	    return DEVICE_STATUS_SUCCESS;
 	} else {
-		mount_argv[0] = self->mount_command;
+	    return status;
 	}
+    }
 
-	g_debug("Mounting media at %s", self->mount_point);
-	status = execute_command(report_error ? self : NULL, mount_argv, NULL);
-	if (status != DEVICE_STATUS_SUCCESS) {
-		/* Wait a few seconds and try again - The tray may still be out after burning */
-		sleep(3);
-		if (execute_command(report_error ? self : NULL, mount_argv, NULL) == DEVICE_STATUS_SUCCESS) {
-			/* Clear error */
-			device_set_error(dself, NULL, DEVICE_STATUS_SUCCESS);
-			return DEVICE_STATUS_SUCCESS;
-		} else {
-			return status;
-		}
-	}
-
-	return status;
+    return status;
 }
 
 static void
 unmount_disc(DvdRwDevice *self)
 {
-	gchar *unmount_argv[] = { NULL, self->mount_point, NULL };
+    gchar *unmount_argv[] = { NULL, self->mount_point, NULL };
 
-	if (self->umount_command == NULL) {
-		unmount_argv[0] = "umount";
-	} else {
-		unmount_argv[0] = self->umount_command;
-	}
+    if (self->umount_command == NULL) {
+	unmount_argv[0] = "umount";
+    } else {
+	unmount_argv[0] = self->umount_command;
+    }
 
-	g_debug("Unmounting media at %s", self->mount_point);
-	execute_command(NULL, unmount_argv, NULL);
+    g_debug("Unmounting media at %s", self->mount_point);
+    execute_command(NULL, unmount_argv, NULL);
 }
 
 static DeviceStatusFlags
 execute_command(DvdRwDevice *self, gchar **argv, gint *result)
 {
-	Device *dself = DEVICE(self);
-	gchar *std_output = NULL;
-	gchar *std_error = NULL;
-	gint errnum = 0;
-	GError *error = NULL;
-	gboolean success;
-	int signum = 0;
+    Device *dself = DEVICE(self);
+    gchar *std_output = NULL;
+    gchar *std_error = NULL;
+    gint errnum = 0;
+    GError *error = NULL;
+    gboolean success;
+    int signum = 0;
 
-	/* g_debug("Executing: %s", argv[0]); */
+    /* g_debug("Executing: %s", argv[0]); */
 
-	g_spawn_sync(NULL, argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL,
-		&std_output, &std_error, &errnum, &error);
+    g_spawn_sync(NULL, argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL,
+	&std_output, &std_error, &errnum, &error);
 
-	/* g_debug("Execution complete"); */
+    /* g_debug("Execution complete"); */
 
-	if (WIFSIGNALED(errnum)) {
-		success = FALSE;
-		signum = WTERMSIG(errnum);
-	} else if (WIFEXITED(errnum)) {
-	    success = (WEXITSTATUS(errnum) == 0);
-	} else {
-	    success = FALSE;
+    if (WIFSIGNALED(errnum)) {
+	success = FALSE;
+	signum = WTERMSIG(errnum);
+    } else if (WIFEXITED(errnum)) {
+	success = (WEXITSTATUS(errnum) == 0);
+    } else {
+	success = FALSE;
+    }
+
+    if (!success) {
+	gchar *error_message = vstrallocf(_("DVDRW device cannot execute '%s': %s (status: %d) (stderr: %s)"),
+	    argv[0], error ? error->message : _("Unknown error"), errnum, std_error ? std_error: "No stderr");
+
+	if (dself != NULL) {
+	    device_set_error(dself, error_message, DEVICE_STATUS_DEVICE_ERROR);
 	}
 
-	if (!success) {
-		gchar *error_message = vstrallocf(_("DVDRW device cannot execute '%s': %s (status: %d) (stderr: %s)"),
-			argv[0], error ? error->message : _("Unknown error"), errnum, std_error ? std_error: "No stderr");
-
-		if (dself != NULL) {
-			device_set_error(dself, error_message, DEVICE_STATUS_DEVICE_ERROR);
-		}
-
-		if (std_output) {
-			g_free(std_output);
-		}
-
-		if (std_error) {
-			g_free(std_error);
-		}
-
-		if (error) {
-			g_error_free(error);
-		}
-
-		if (result != NULL) {
-			*result = errnum;
-		}
-
-		return DEVICE_STATUS_DEVICE_ERROR;
+	if (std_output) {
+	    g_free(std_output);
 	}
 
-	return DEVICE_STATUS_SUCCESS;
+	if (std_error) {
+	    g_free(std_error);
+	}
+
+	if (error) {
+	    g_error_free(error);
+	}
+
+	if (result != NULL) {
+	    *result = errnum;
+	}
+
+	return DEVICE_STATUS_DEVICE_ERROR;
+    }
+
+    return DEVICE_STATUS_SUCCESS;
 }
