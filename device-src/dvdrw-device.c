@@ -51,6 +51,7 @@ struct _DvdRwDevice {
     gchar *cache_data;
     gchar *mount_point;
     gchar *mount_data;
+    gboolean mounted;
     gboolean keep_cache;
     gboolean unlabelled_when_unmountable;
     gchar *growisofs_command;
@@ -271,6 +272,7 @@ dvdrw_device_init (DvdRwDevice *self)
     self->cache_data = NULL;
     self->mount_point = NULL;
     self->mount_data = NULL;
+    self->mounted = FALSE;
     self->keep_cache = FALSE;
     self->growisofs_command = NULL;
     self->mount_command = NULL;
@@ -401,6 +403,7 @@ dvdrw_device_read_label(Device *dself)
 {
     DvdRwDevice *self = DVDRW_DEVICE(dself);
     VfsDevice *vself = VFS_DEVICE(dself);
+    gboolean mounted;
     DeviceStatusFlags status;
     struct stat dir_status;
     DeviceClass *parent_class = DEVICE_CLASS(g_type_class_peek_parent(DVDRW_DEVICE_GET_CLASS(dself)));
@@ -410,14 +413,15 @@ dvdrw_device_read_label(Device *dself)
     if (device_in_error(dself)) return DEVICE_STATUS_DEVICE_ERROR;
     if (!check_readable(self)) return DEVICE_STATUS_DEVICE_ERROR;
 
-    status = mount_disc(self, !self->unlabelled_when_unmountable);
-    if (status != DEVICE_STATUS_SUCCESS) {
-	/* Not mountable. May be freshly formatted or corrupted, drive may be empty. */
-	if (self->unlabelled_when_unmountable) {
-	    return DEVICE_STATUS_VOLUME_UNLABELED;
-	} else {
-	    return status;
+    if (!self->mounted) {
+	status = mount_disc(self, !self->unlabelled_when_unmountable);
+	if (status != DEVICE_STATUS_SUCCESS) {
+	    /* Not mountable. May be freshly formatted or corrupted, drive may be empty. */
+	    return (self->unlabelled_when_unmountable)
+		? DEVICE_STATUS_VOLUME_UNLABELED
+		: status;
 	}
+	mounted = TRUE;
     }
 
     if ((stat(self->mount_data, &dir_status) < 0) && (errno == ENOENT)) {
@@ -432,7 +436,9 @@ dvdrw_device_read_label(Device *dself)
     vself->dir_name = g_strdup(self->mount_data);
     status = parent_class->read_label(dself);
 
-    unmount_disc(self);
+    if (mounted) {
+	unmount_disc(self);
+    }
 
     return status;
 }
@@ -602,6 +608,10 @@ mount_disc(DvdRwDevice *self, gboolean report_error)
     gchar *mount_argv[] = { NULL, self->mount_point, NULL };
     DeviceStatusFlags status;
 
+    if (self->mounted) {
+	return DEVICE_STATUS_SUCCESS;
+    }
+
     if (self->mount_command == NULL) {
 	mount_argv[0] = "mount";
     } else {
@@ -616,19 +626,26 @@ mount_disc(DvdRwDevice *self, gboolean report_error)
 	if (execute_command(report_error ? self : NULL, mount_argv, NULL) == DEVICE_STATUS_SUCCESS) {
 	    /* Clear error */
 	    device_set_error(dself, NULL, DEVICE_STATUS_SUCCESS);
+	    self->mounted = TRUE;
 	    return DEVICE_STATUS_SUCCESS;
 	} else {
 	    return status;
 	}
     }
 
-    return status;
+    self->mounted = TRUE;
+    return DEVICE_STATUS_SUCCESS;
 }
 
 static void
 unmount_disc(DvdRwDevice *self)
 {
     gchar *unmount_argv[] = { NULL, self->mount_point, NULL };
+    DeviceStatusFlags status;
+
+    if (! self->mounted) {
+	return DEVICE_STATUS_SUCCESS;
+    }
 
     if (self->umount_command == NULL) {
 	unmount_argv[0] = "umount";
@@ -637,7 +654,10 @@ unmount_disc(DvdRwDevice *self)
     }
 
     g_debug("Unmounting media at %s", self->mount_point);
-    execute_command(NULL, unmount_argv, NULL);
+    status = execute_command(NULL, unmount_argv, NULL);
+    if (status == DEVICE_STATUS_SUCCESS) {
+	self->mounted = FALSE;
+    }
 }
 
 static DeviceStatusFlags

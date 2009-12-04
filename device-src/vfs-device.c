@@ -958,7 +958,7 @@ static gboolean
 vfs_device_start_file (Device * dself, dumpfile_t * ji) {
     VfsDevice * self = VFS_DEVICE(dself);
 
-    pself->is_eom = FALSE;
+    dself->is_eom = FALSE;
 
     if (device_in_error(self)) return FALSE;
 
