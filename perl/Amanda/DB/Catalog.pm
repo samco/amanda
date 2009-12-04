@@ -442,13 +442,8 @@ sub get_dumps {
 	    );
 
 	    # partnum and nparts takes some special interpretation
-	    if (my ($partnum, $nparts) = $find_result->{'partnum'} =~ m$(\d+)/(-?\d+)$) {
-		$dumpfile{'partnum'} = $partnum+0;
-		$dumpfile{'nparts'} = $nparts+0;
-	    } else {
-		$dumpfile{'partnum'} = 1;
-		$dumpfile{'nparts'} = 1;
-	    }
+	    $dumpfile{'partnum'} = $find_result->{'partnum'};
+	    $dumpfile{'nparts'} = $find_result->{'totalparts'};
 
 	    # check partnum and nparts
 	    next if (defined($params{'partnum'}) and $dumpfile{'partnum'} != $params{'partnum'});
@@ -557,7 +552,7 @@ sub add_dump {
 
 	    # if this is part number 1, reset our secs and kbs counters on the
 	    # assumption that this is the beginning of a new dump
-	    if ($find_result->{'partnum'} =~ qr{1/\d}) {
+	    if ($find_result->{'partnum'} == 1) {
 		$last_secs = $last_kbs = 0;
 	    }
 	    $last_secs += $find_result->{'sec'};

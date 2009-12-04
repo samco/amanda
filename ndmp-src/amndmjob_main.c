@@ -46,7 +46,7 @@ main (int ac, char *av[])
 {
 	int rc;
 
-	set_pname("ndmjob");
+	set_pname("amndmjob");
 	dbopen(DBG_SUBDIR_CLIENT);
 
 	NDMOS_MACRO_ZEROFILL(&the_session);

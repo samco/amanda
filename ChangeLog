@@ -1,3 +1,67 @@
+2009-12-03  Paul C. Mantz <pcmantz@zmanda.com>
+	* server-src/tapefile.c server-src/tapefile.h
+          perl/Amanda/Tapelist.swg installcheck/Amanda_Tapelist.pl:
+          added and swigged get_last_reusable_tape_label(). 
+	
+
+2009-12-02  Jean-Louis Martineau <martineau@zmanda.com>
+	* perl/Amanda/Taper/Scan/traditional.pm: continue the scan on inuse
+						 error.
+
+2009-12-02  Jean-Louis Martineau <martineau@zmanda.com>
+	* perl/Amanda/Taper/Scan/traditional.pm: Release reservation on error.
+
+2009-12-01  Jean-Louis Martineau <martineau@zmanda.com>
+	* perl/Amanda/Device.swg: #include "glib-util.h".
+
+2009-12-01  Jean-Louis Martineau <martineau@zmanda.com>
+	* common-src/conffile.c: Fix conf_init_data_path argument type.
+	* common-src/debug.c: Use gpointer.
+	* ndmp-src/ndmjob_main.c, ndmp-src/amndmjob_main.c:
+	  #include "util.h" for set_pname prototype.
+	* ndmp-src/ndma_cops_backreco.c: Add prototype.
+	* ndmp-src/ndmjob.h, ndmp-src/ndmjob_args.c:
+	  Rename version_info to ndmjob_version_info to avoid conflict.
+
+2009-12-01  Jean-Louis Martineau <martineau@zmanda.com>
+	* perl/Amanda/DB/Catalog.pm: Fix for new find_result_t api.
+	* installcheck/Amanda_Logfile.pl: Fix for perl-5.6.
+	* installcheck/Amanda_DB_Catalog.pl: Fix for perl-5.6.
+
+2009-12-01  Jean-Louis Martineau <martineau@zmanda.com>
+	* ndmp-src/Makefile.am: amndmjob_SOURCES = amndmjob_main.c
+
+2009-12-01  Jean-Louis Martineau <martineau@zmanda.com>
+	* server-src/find.c: Fix for older log entry.
+	* perl/Amanda/DB/Catalog.pm: Fix for new totalparts in find_result_t.
+	* perl/Amanda/Logfile.pod: Add totalparts.
+	* installcheck/Amanda_Logfile.pl: Fix for new totalparts in
+					  find_result_t.
+
+2009-12-01  Jean-Louis Martineau <martineau@zmanda.com>
+	* installcheck/Amanda_Changer_single.pl: Fix for not fast searchable.
+
+2009-12-01  Jean-Louis Martineau <martineau@zmanda.com>
+	* perl/Amanda/Changer/single.pm: Use except_slot,
+					 It is not fast searchable.
+
+2009-12-01  Jean-Louis Martineau <martineau@zmanda.com>
+	* server-src/find.h: Keep partnum and totalparts as int.
+	* server-src/find.c: Compute totalparts if -1.
+	* perl/Amanda/Logfile.swg: Change api.
+	* restore-src/amfetchdump.c, restore-src/restore.c,
+	  server-src/amcheckdump.pl, server-src/amindexd.c: Use new api.
+
+2009-12-01  Jean-Louis Martineau <martineau@zmanda.com>
+	* ndmp-src/Makefile.am: Build ndmjob with original tape simulator.
+				Build amndmjob with modifier tape simulator.
+	* ndmp-src/amndma_tape_simulator.c: The modified tape simulator.
+	* ndmp-src/amndmjob_main.c: Main amndmjob program.
+	* ndmp-src/ndma_tape_simulator.c: The original tape simulator.
+
+2009-11-27  Jean-Louis Martineau <martineau@zmanda.com>
+	* server-src/amstatus.pl: Small fix.
+
 2009-11-27  Jean-Louis Martineau <martineau@zmanda.com>
 	* server-src/taper.pl: Fix quote_string use.
 
